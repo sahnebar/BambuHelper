@@ -2375,9 +2375,12 @@ static void handleDebug() {
     p["rec_finish"] = d.recoveryFinish;
     p["rec_idle"] = d.recoveryIdle;
     p["rec_idle_hot"] = d.recoveryIdleHot;
+    p["rec_finish_hot"] = d.recoveryFinishHot;
     p["rec_failed"] = d.recoveryFailed;
     p["last_pushall_reason"] = pushallReasonToString(d.lastPushallReason);
     p["last_pushall_age_s"] = d.lastPushallMs > 0 ? (now - d.lastPushallMs) / 1000UL : 0;
+    p["last_update_age_s"] = st.lastUpdate > 0 ? (now - st.lastUpdate) / 1000UL : 0;
+    p["last_print_data_age_s"] = st.lastPrintDataMs > 0 ? (now - st.lastPrintDataMs) / 1000UL : 0;
   }
 
   doc["heap"] = ESP.getFreeHeap();

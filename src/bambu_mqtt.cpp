@@ -32,6 +32,8 @@ struct MqttConn {
   bool wasConnected;              // track connected->disconnected transitions for logging
   unsigned long stalePushallSentMs;  // when recovery pushall was sent on stale detection
   unsigned long lastRecoveryResolvedMs;  // when last recovery resolved (cooldown timer)
+  bool hotFinishArmed;       // FINISH cycle observed cold targets at least once
+  bool hotFinishHintConsumed;// FINISH-hot recovery pushall already sent this cycle
 };
 
 static MqttConn conns[MAX_ACTIVE_PRINTERS];
@@ -85,6 +87,7 @@ const char* pushallReasonToString(uint8_t reason) {
     case PUSHALL_RECOVERY_FINISH:    return "Recovery (Finish)";
     case PUSHALL_RECOVERY_IDLE:      return "Recovery (Idle)";
     case PUSHALL_RECOVERY_IDLE_HOT:  return "Recovery (Idle/Hot)";
+    case PUSHALL_RECOVERY_FINISH_HOT:return "Recovery (Finish/Hot)";
     case PUSHALL_RECOVERY_FAILED:    return "Recovery (Failed)";
     case PUSHALL_MANUAL:             return "Manual";
     case PUSHALL_NONE:
@@ -200,6 +203,7 @@ static bool requestPushall(MqttConn& c, PushallReason reason) {
     case PUSHALL_RECOVERY_FINISH:    c.diag.recoveryFinish++;   break;
     case PUSHALL_RECOVERY_IDLE:      c.diag.recoveryIdle++;     break;
     case PUSHALL_RECOVERY_IDLE_HOT:  c.diag.recoveryIdleHot++;  break;
+    case PUSHALL_RECOVERY_FINISH_HOT:c.diag.recoveryFinishHot++;break;
     case PUSHALL_RECOVERY_FAILED:    c.diag.recoveryFailed++;   break;
     default: break;
   }
@@ -1146,6 +1150,14 @@ static void handleConn(MqttConn& c) {
   bool recoveryCooldown = cloud &&
       c.lastRecoveryResolvedMs > 0 && millis() - c.lastRecoveryResolvedMs < 300000;
 
+  // Re-arm hot-FINISH detection whenever state has left FINISH. The FINISH->RUNNING
+  // transition goes through the s.printing branch below, which returns before any
+  // per-state catch-all could fire — so the reset has to live up here.
+  if (s.gcodeStateId != GCODE_FINISH) {
+    c.hotFinishArmed = false;
+    c.hotFinishHintConsumed = false;
+  }
+
   // --- Active print: core data freshness ---
   if (s.printing) {
     unsigned long printStaleMs = cloud ? BAMBU_PRINT_STALE_TIMEOUT : BAMBU_STALE_TIMEOUT;
@@ -1208,6 +1220,29 @@ static void handleConn(MqttConn& c) {
     // FINISH is enough.  Resetting would create an infinite loop every
     // finishHoldMs minutes, risking cloud error 49.
     // stalePushallSentMs resets naturally when state leaves FINISH.
+
+    // Hot-target recovery (mirrors the IDLE/Hot branch). If cloud forwards
+    // target deltas but drops the gcode_state delta, our cached state stays
+    // FINISH while heater targets jump for the new print. ARMING is a pure
+    // state observation - it must NOT be throttle-gated, otherwise the device
+    // can sit through the throttle window with targets briefly cold, miss the
+    // arming, and then never recover when targets go hot. The pushall send
+    // remains gated by throttle/cooldown.
+    if (cloud && connAlive) {
+      bool coldFinish = (s.nozzleTarget <= 50.0f && s.bedTarget <= 30.0f);
+      bool hotFinish  = (s.nozzleTarget > 50.0f || s.bedTarget > 30.0f);
+
+      if (coldFinish) c.hotFinishArmed = true;
+
+      if (c.hotFinishArmed && hotFinish && !c.hotFinishHintConsumed &&
+          !cloudPushallThrottled && !recoveryCooldown) {
+        MQTT_LOG("[%d] hot FINISH (nT=%.0f bT=%.0f) - recovery pushall",
+                 c.slotIndex, s.nozzleTarget, s.bedTarget);
+        esp_task_wdt_reset();
+        if (requestPushall(c, PUSHALL_RECOVERY_FINISH_HOT))
+          c.hotFinishHintConsumed = true;
+      }
+    }
 
   // --- Idle cloud: connection freshness + hot-target staleness ---
   } else if (isConnected && cloud && s.gcodeStateId == GCODE_IDLE) {
@@ -1407,13 +1442,14 @@ void requestCloudRefresh(uint8_t slot) {
   BambuState& s = printers[slot].state;
   if (!isCloudMode(cfg.mode)) return;
   if (!c.mqtt || !c.mqtt->connected()) return;
-  // Manual refresh is useful for states where cloud goes silent: UNKNOWN
-  // (printer just came online, no full status yet) and FAILED (after a
-  // failed print, cloud stops pushing state changes until something on the
-  // backend nudges it - e.g. opening Bambu Handy).
-  if (s.gcodeStateId != GCODE_UNKNOWN &&
-      s.gcodeStateId != GCODE_FAILED) return;
-  // Debounce: at most once per 5 seconds
+  // Manual refresh is the user's explicit escape hatch for any non-printing
+  // cloud state where the broker may have gone silent: UNKNOWN (printer just
+  // online), FAILED (cloud stops pushing after failed print), FINISH (cloud
+  // can drop state delta when keep-print-screen leaves us cached as FINISH),
+  // IDLE. Never disturb an active print - the live stream is already flowing.
+  if (s.printing) return;
+  // Debounce: at most once per 5 seconds. Intentionally exempt from the
+  // 2-min cloud recovery throttle because this is user-initiated.
   static unsigned long lastRefreshMs = 0;
   if (lastRefreshMs > 0 && millis() - lastRefreshMs < 5000) return;
   lastRefreshMs = millis();
