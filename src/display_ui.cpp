@@ -1668,7 +1668,7 @@ static void drawIdle() {
   static float    idlePrevWatts        = -2.0f;
 
   bool idleTasmotaOnline = tasmotaIsActiveForSlot(rotState.displayIndex);
-  float idleCurWatts = tasmotaGetWatts();
+  float idleCurWatts = tasmotaGetWattsForSlot(rotState.displayIndex);
 
   int16_t botCY = scrH - 9;
   bool batChanged = batteryStateChanged();
@@ -1677,8 +1677,8 @@ static void drawIdle() {
                        (s.ams.activeTray != prevState.ams.activeTray) ||
                        (s.doorOpen != prevState.doorOpen) ||
                        (s.doorSensorPresent != prevState.doorSensorPresent) ||
-                       (tasmotaSettings.enabled && (idleTasmotaOnline != idlePrevTasmotaOnline ||
-                                                    idleCurWatts != idlePrevWatts));
+                       (idleTasmotaOnline != idlePrevTasmotaOnline) ||
+                       (idleTasmotaOnline && idleCurWatts != idlePrevWatts);
   idlePrevTasmotaOnline  = idleTasmotaOnline;
   idlePrevWatts          = idleCurWatts;
 
@@ -1712,7 +1712,7 @@ static void drawIdle() {
     if (showPower) {
       drawIcon16(tft, cx - 20, botCY - 8, icon_lightning, CLR_YELLOW);
       char wBuf[8];
-      snprintf(wBuf, sizeof(wBuf), "%.0fW", tasmotaGetWatts());
+      snprintf(wBuf, sizeof(wBuf), "%.0fW", idleCurWatts);
       tft.setTextDatum(ML_DATUM);
       tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
       tft.drawString(wBuf, cx - 2, botCY);
@@ -2747,7 +2747,11 @@ static void drawPrinting() {
   static bool     prevTasmotaOnline = false;
   static float    prevWatts        = -2.0f;
 
-  if (tasmotaSettings.enabled && tasmotaSettings.displayMode == 0) {
+  bool tasmotaOnline = tasmotaIsActiveForSlot(rotState.displayIndex);
+  uint8_t tasmotaDM  = tasmotaDisplayModeForSlot(rotState.displayIndex);
+  float curWatts     = tasmotaGetWattsForSlot(rotState.displayIndex);
+
+  if (tasmotaOnline && tasmotaDM == 0) {
     if (millis() - altFlipMs > 4000) {
       altShowPower = !altShowPower;
       altFlipMs    = millis();
@@ -2756,8 +2760,6 @@ static void drawPrinting() {
     altShowPower = false;
     altFlipMs    = 0;
   }
-  bool tasmotaOnline = tasmotaIsActiveForSlot(rotState.displayIndex);
-  float curWatts = tasmotaGetWatts();
 
   bool showingWifi = !(s.ams.present && s.ams.activeTray < AMS_MAX_TRAYS && s.ams.trays[s.ams.activeTray].present)
                   && !(s.ams.vtPresent && s.ams.activeTray == 254);
@@ -2770,8 +2772,9 @@ static void drawPrinting() {
                        (s.totalLayers != prevState.totalLayers) ||
                        (s.ams.activeTray != prevState.ams.activeTray) ||
                        (showingWifi && s.wifiSignal != prevState.wifiSignal) ||
-                       (tasmotaSettings.enabled && (altShowPower != prevAltShowPower || tasmotaOnline != prevTasmotaOnline ||
-                                                    curWatts != prevWatts));
+                       (altShowPower != prevAltShowPower) ||
+                       (tasmotaOnline != prevTasmotaOnline) ||
+                       (tasmotaOnline && curWatts != prevWatts);
   prevAltShowPower  = altShowPower;
   prevTasmotaOnline = tasmotaOnline;
   prevWatts         = curWatts;
@@ -2801,12 +2804,11 @@ static void drawPrinting() {
     // Predict center text so we can clamp the filament name's right edge
     // and avoid overlap with the layer/power readout (smooth fonts in v2.8
     // are slightly wider than the previous bitmap font).
-    bool showPowerNow = tasmotaSettings.enabled && tasmotaOnline &&
-                        (tasmotaSettings.displayMode == 1 || altShowPower);
+    bool showPowerNow = tasmotaOnline && (tasmotaDM == 1 || altShowPower);
     char centerBuf[20];
     int16_t centerLeftX;
     if (showPowerNow) {
-      snprintf(centerBuf, sizeof(centerBuf), "%.0fW", tasmotaGetWatts());
+      snprintf(centerBuf, sizeof(centerBuf), "%.0fW", curWatts);
       centerLeftX = botCx - 20;  // icon starts here (icon_lightning is 16px)
     } else {
       snprintf(centerBuf, sizeof(centerBuf), "%d/%d", s.layerNum, s.totalLayers);
@@ -2997,17 +2999,26 @@ static void drawFinished() {
   // eff_finBotY)/2 produced a clear band that overlapped the file name.
   // Now we use the explicit landscape KWH Y which sits below the file.
   bool tasmotaActiveHere = tasmotaIsActiveForSlot(rotState.displayIndex);
-  float finishKwh = tasmotaActiveHere ? tasmotaGetPrintKwhUsed() : -1.0f;
-  bool kwhChanged = (tasmotaActiveHere && tasmotaKwhChanged()) ||
+  // STRICT mapping for print kWh/cost: on single-plug "Any" config, watts can
+  // be visible on both printer screens but the kWh row must NOT show plug 0's
+  // value on printer 2's screen.
+  float finishKwh = tasmotaGetPrintKwhUsedForSlot(rotState.displayIndex);
+  float finishTariff = tasmotaTariffForSlot(rotState.displayIndex);
+  bool kwhChanged = tasmotaKwhChangedForSlot(rotState.displayIndex) ||
                     (tasmotaActiveHere != prevFinTasmotaOnline) ||
                     (finishKwh != prevFinKwh);
   if (forceRedraw || kwhChanged) {
     const int16_t kwhY = finKwhY;
     tft.fillRect(0, kwhY - 9, scrW, 18, CLR_BG);
-    if (tasmotaActiveHere && finishKwh >= 0.0f) {
+    if (finishKwh >= 0.0f) {
       drawIcon16(tft, cx - 32, kwhY - 8, icon_lightning, CLR_YELLOW);
-      char kwhBuf[16];
-      snprintf(kwhBuf, sizeof(kwhBuf), "%.3f kWh", finishKwh);
+      char kwhBuf[32];
+      if (finishTariff > 0.0f) {
+        snprintf(kwhBuf, sizeof(kwhBuf), "%.3f kWh  (%.2f %s)",
+                 finishKwh, finishKwh * finishTariff, tasmotaCurrencySymbol());
+      } else {
+        snprintf(kwhBuf, sizeof(kwhBuf), "%.3f kWh", finishKwh);
+      }
       tft.setTextDatum(ML_DATUM);
       setFont(tft, FONT_BODY);
       tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
@@ -3055,13 +3066,13 @@ static void drawFinished() {
 
   // === Bottom status bar ===
   bool waitingForDoor = dpSettings.doorAckEnabled && s.doorSensorPresent && !s.doorAcknowledged;
-  float finCurWatts = tasmotaGetWatts();
+  float finCurWatts = tasmotaGetWattsForSlot(rotState.displayIndex);
   bool finBatChanged = batteryStateChanged();
   bool finBottomChanged = finBatChanged || forceRedraw ||
                           (waitingForDoor != prevWaitingForDoor) ||
                           (s.doorSensorPresent && s.doorOpen != prevState.doorOpen) ||
                           (tasmotaActiveHere != prevFinTasmotaOnline) ||
-                          (finCurWatts != prevFinWatts);
+                          (tasmotaActiveHere && finCurWatts != prevFinWatts);
   if (finBottomChanged) {
     prevWaitingForDoor = waitingForDoor;
     tft.fillRect(0, eff_finBotY, scrW, eff_finBotH, CLR_BG);

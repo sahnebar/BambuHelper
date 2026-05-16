@@ -136,12 +136,24 @@ struct LedSettings {
 };
 
 // Tasmota smart plug power monitoring
+// Dual plug on full-RAM builds, single plug on BOARD_LOW_RAM (CYD/tzt_2432/esp32c3).
+#ifdef BOARD_LOW_RAM
+  #define TASMOTA_PLUG_COUNT 1
+#else
+  #define TASMOTA_PLUG_COUNT 2
+#endif
+
 struct TasmotaSettings {
   bool    enabled;
   char    ip[16];
-  uint8_t displayMode;   // 0=alternate layers/power every 4s, 1=always show power
-  uint8_t pollInterval;  // poll interval in seconds (10-30)
-  uint8_t assignedSlot;  // printer slot this plug belongs to (0, 1, ... or 255=any)
+  uint8_t displayMode;       // 0=alternate layers/power every 4s, 1=always show power
+  uint8_t pollInterval;      // poll interval in seconds (10-60)
+#if TASMOTA_PLUG_COUNT == 1
+  uint8_t assignedSlot;      // single-plug builds: which printer slot (0, 1, ... or 255=any)
+#endif
+  bool    autoOffEnabled;    // power off plug N minutes after FINISH and cooldown
+  uint8_t autoOffDelayMin;   // minutes after FINISH (1-240)
+  float   tariffPerKwh;      // currency-agnostic; UI uses one global symbol
 };
 
 extern char wifiSSID[33];
@@ -154,7 +166,8 @@ extern ButtonType buttonType;
 extern uint8_t buttonPin;
 extern BuzzerSettings buzzerSettings;
 extern LedSettings ledSettings;
-extern TasmotaSettings tasmotaSettings;
+extern TasmotaSettings tasmotaSettings[TASMOTA_PLUG_COUNT];
+extern char tasmotaCurrency[8];   // e.g. "€", "$", "zł"
 extern bool dualPrinterUnsafe;
 
 void loadSettings();

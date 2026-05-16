@@ -54,11 +54,6 @@ static bool isSleepStickyScreen(ScreenState state) {
   return state == SCREEN_CLOCK || state == SCREEN_OFF;
 }
 
-static bool isDisplayedPrinterAssignedToTasmota() {
-  return tasmotaSettings.assignedSlot == 255 ||
-         tasmotaSettings.assignedSlot == rotState.displayIndex;
-}
-
 static void transitionToClockOrOff() {
   if (dpSettings.showClockAfterFinish || buttonType == BTN_DISABLED) {
     setScreenState(SCREEN_CLOCK);
@@ -270,9 +265,6 @@ static void handleDisplayedPrinterFinishState(ScreenState current, BambuState& s
   if (current != SCREEN_FINISHED && !isSleepStickyScreen(current) &&
       !(current == SCREEN_IDLE && s.ams.anyDrying) &&
       !(current == SCREEN_PRINTING && finishActive)) {
-    if (tasmotaSettings.enabled && isDisplayedPrinterAssignedToTasmota()) {
-      tasmotaMarkPrintEnd();
-    }
     setScreenState(dpSettings.keepPrintScreen ? SCREEN_PRINTING : SCREEN_FINISHED);
     finishScreenStart = millis();
     finishActive = true;
@@ -318,21 +310,12 @@ static void handleDisplayedPrinterIdleState(ScreenState current, const BambuStat
 
 static void handleDisplayedPrinterConnectedState(ScreenState current, BambuState& s) {
   if (s.printing) {
-    // printStartEdge catches both transitions into an active print:
-    //  - non-keep-print-screen path: screen was SCREEN_FINISHED / SCREEN_IDLE / etc.
-    //  - keep-print-screen path: screen was already SCREEN_PRINTING (finishActive=true)
-    // With this flag we call tasmotaMarkPrintStart() exactly once per edge.
-    bool printStartEdge = (current != SCREEN_PRINTING) || finishActive;
-
     if (current != SCREEN_PRINTING) {
       setScreenState(SCREEN_PRINTING);
     }
     if (finishActive) {
       finishActive = false;
       idleClockActive = false;
-    }
-    if (printStartEdge && isDisplayedPrinterAssignedToTasmota()) {
-      tasmotaMarkPrintStart();
     }
     s.finishBuzzerPlayed = false;  // reset for next finish event
     s.doorAcknowledged = false;    // reset door ack for next finish
@@ -478,6 +461,21 @@ static void handleGcodeStateTransitions() {
       if (isPrintingGcodeState(ps.gcodeStateId) &&
           !isPrintingGcodeState(prevGcodeStateId[i])) {
         ps.bedCooldownAlertArmed = false;
+      }
+
+      // Per-slot Tasmota print start/end edges — independent of which printer
+      // is on screen, so dual-plug stats stay accurate even when displaying
+      // the other printer.
+      uint8_t plug = tasmotaPlugForPrinterSlot(i);
+      if (plug != 0xFF) {
+        bool wasPrinting = isPrintingGcodeState(prevGcodeStateId[i]);
+        bool isPrinting  = isPrintingGcodeState(ps.gcodeStateId);
+        if (isPrinting && !wasPrinting) {
+          tasmotaMarkPrintStart(plug);
+        }
+        if (ps.gcodeStateId == GCODE_FINISH && prevGcodeStateId[i] != GCODE_FINISH) {
+          tasmotaMarkPrintEnd(plug);
+        }
       }
     }
     prevGcodeStateId[i] = ps.gcodeStateId;
