@@ -153,7 +153,6 @@ struct TasmotaSettings {
 #endif
   bool    autoOffEnabled;    // power off plug N minutes after FINISH and cooldown
   uint8_t autoOffDelayMin;   // minutes after FINISH (1-240)
-  float   tariffPerKwh;      // currency-agnostic; UI uses one global symbol
 };
 
 extern char wifiSSID[33];
@@ -167,7 +166,8 @@ extern uint8_t buttonPin;
 extern BuzzerSettings buzzerSettings;
 extern LedSettings ledSettings;
 extern TasmotaSettings tasmotaSettings[TASMOTA_PLUG_COUNT];
-extern char tasmotaCurrency[8];   // e.g. "€", "$", "zł"
+extern char  tasmotaCurrency[8];      // e.g. "€", "$", "zł"
+extern float tasmotaTariffPerKwh;     // global tariff (same for all plugs)
 extern bool dualPrinterUnsafe;
 
 void loadSettings();

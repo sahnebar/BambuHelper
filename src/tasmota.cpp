@@ -395,10 +395,11 @@ float tasmotaGetPrintKwhUsedForSlot(uint8_t slot) {
   return g_rt[p].printUsedKwh;
 }
 
-float tasmotaTariffForSlot(uint8_t slot) {
-  uint8_t p = tasmotaPlugForPrinterSlot(slot);  // STRICT
-  if (p == 0xFF) return 0.0f;
-  return tasmotaSettings[p].tariffPerKwh;
+float tasmotaTariffForSlot(uint8_t /*slot*/) {
+  // Tariff is global (one electricity provider, one rate). Slot parameter
+  // kept for callsite compatibility but no longer routes through the plug
+  // mapping — the kWh check upstream already gates whether cost is drawn.
+  return tasmotaTariffPerKwh;
 }
 
 const char* tasmotaCurrencySymbol() {

@@ -31,6 +31,7 @@ LedSettings ledSettings = {
   /*errorStrobe*/         false,
 };
 TasmotaSettings tasmotaSettings[TASMOTA_PLUG_COUNT] = {};
+float tasmotaTariffPerKwh = 0.0f;
 char tasmotaCurrency[8] = "\xE2\x82\xAC";  // "€" UTF-8 default
 
 // Experimental: opt-in 2-printer mode on BOARD_LOW_RAM. Local-only -
@@ -455,12 +456,6 @@ void loadSettings() {
       if (ad < 1 || ad > 240) ad = 10;
       tasmotaSettings[i].autoOffDelayMin = ad;
     }
-    snprintf(k, sizeof(k), "tsm%u_tar", i); {
-      float t = prefs.getFloat(k, 0.0f);
-      if (t < 0.0f) t = 0.0f;
-      if (t > 10.0f) t = 10.0f;
-      tasmotaSettings[i].tariffPerKwh = t;
-    }
 #if TASMOTA_PLUG_COUNT == 1
     snprintf(k, sizeof(k), "tsm%u_as",  i); {
       uint8_t a = prefs.getUChar(k, 255);
@@ -470,6 +465,12 @@ void loadSettings() {
 #endif
   }
   strlcpy(tasmotaCurrency, prefs.getString("tsm_cur", "\xE2\x82\xAC").c_str(), sizeof(tasmotaCurrency));
+  {
+    float t = prefs.getFloat("tsm_tariff", 0.0f);
+    if (t < 0.0f) t = 0.0f;
+    if (t > 10.0f) t = 10.0f;
+    tasmotaTariffPerKwh = t;
+  }
 
   // Experimental dual-printer override on BOARD_LOW_RAM (local-only, not exported)
   dualPrinterUnsafe = prefs.getBool("dualp", false);
@@ -548,9 +549,6 @@ void saveSettings() {
     if (pi < 10 || pi > 60) pi = 10;
     uint8_t ad = tasmotaSettings[i].autoOffDelayMin;
     if (ad < 1 || ad > 240) ad = 10;
-    float t = tasmotaSettings[i].tariffPerKwh;
-    if (t < 0.0f) t = 0.0f;
-    if (t > 10.0f) t = 10.0f;
 
     snprintf(k, sizeof(k), "tsm%u_en",  i); prefs.putBool(k, tasmotaSettings[i].enabled);
     snprintf(k, sizeof(k), "tsm%u_ip",  i); prefs.putString(k, tasmotaSettings[i].ip);
@@ -558,7 +556,6 @@ void saveSettings() {
     snprintf(k, sizeof(k), "tsm%u_pi",  i); prefs.putUChar(k, pi);
     snprintf(k, sizeof(k), "tsm%u_ao",  i); prefs.putBool(k, tasmotaSettings[i].autoOffEnabled);
     snprintf(k, sizeof(k), "tsm%u_ad",  i); prefs.putUChar(k, ad);
-    snprintf(k, sizeof(k), "tsm%u_tar", i); prefs.putFloat(k, t);
 #if TASMOTA_PLUG_COUNT == 1
     uint8_t a = tasmotaSettings[i].assignedSlot;
     if (a != 255 && a >= MAX_ACTIVE_PRINTERS) a = 255;
@@ -566,6 +563,12 @@ void saveSettings() {
 #endif
   }
   prefs.putString("tsm_cur", tasmotaCurrency);
+  {
+    float t = tasmotaTariffPerKwh;
+    if (t < 0.0f) t = 0.0f;
+    if (t > 10.0f) t = 10.0f;
+    prefs.putFloat("tsm_tariff", t);
+  }
 
   // Experimental dual-printer override on BOARD_LOW_RAM (local-only, not exported)
   prefs.putBool("dualp", dualPrinterUnsafe);

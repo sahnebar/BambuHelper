@@ -18,7 +18,7 @@ uint8_t tasmotaPrinterSlotForPlug(uint8_t plug);
 //   tasmotaGetWattsForSlot - LOOSE mapping; 0 when not active
 //   tasmotaDisplayModeForSlot - LOOSE mapping; defaults to 0 (alternate)
 //   tasmotaGetPrintKwhUsedForSlot - STRICT mapping; -1 when no print recorded
-//   tasmotaTariffForSlot - STRICT mapping; 0 when no plug owns this slot
+//   tasmotaTariffForSlot - returns the global tariff (slot ignored)
 //   tasmotaCurrencySymbol - global UTF-8 currency symbol
 bool        tasmotaIsActiveForSlot(uint8_t slot);
 float       tasmotaGetWattsForSlot(uint8_t slot);

@@ -782,8 +782,16 @@ R"rawliteral(
         Show live power consumption from Tasmota smart plug(s) on the display.<br>
         Configure auto power-off and energy tariff per plug.
       </p>
-      <label for="tsm_cur" style="margin-top:4px">Currency symbol</label>
-      <input type="text" id="tsm_cur" value="" placeholder="&euro;" maxlength="6" style="max-width:80px">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end">
+        <div>
+          <label for="tsm_cur" style="margin-top:4px">Currency symbol</label>
+          <input type="text" id="tsm_cur" value="" placeholder="&euro;" maxlength="6" style="max-width:80px">
+        </div>
+        <div>
+          <label for="tsm_tar" style="margin-top:4px">Tariff per kWh</label>
+          <input type="number" id="tsm_tar" value="0" min="0" max="10" step="0.001" style="max-width:120px">
+        </div>
+      </div>
 
       <div style="display:flex;gap:6px;margin-top:14px" id="powerTabBar">
         <button type="button" class="power-tab-btn" onclick="selectPowerTab(0)" id="ptab0" style="flex:1;padding:8px;border:none;border-radius:6px;background:#238636;color:#fff;cursor:pointer">Plug 1</button>
@@ -819,8 +827,6 @@ R"rawliteral(
       </p>
       <label for="tsm_ad" style="margin-top:10px">Auto-off delay (minutes)</label>
       <input type="number" id="tsm_ad" value="10" min="1" max="240" style="max-width:100px">
-      <label for="tsm_tar" style="margin-top:10px">Tariff per kWh</label>
-      <input type="number" id="tsm_tar" value="0" min="0" max="10" step="0.001" style="max-width:120px">
 
       <hr style="border:none;border-top:1px solid #30363d;margin:14px 0">
       <div style="font-size:13px;color:#C9D1D9">
@@ -1230,7 +1236,7 @@ function selectPowerTab(plug){
     document.getElementById('tsm_pi').value    = d.pollInterval || 10;
     document.getElementById('tsm_ao').checked  = !!d.autoOffEnabled;
     document.getElementById('tsm_ad').value    = d.autoOffDelayMin || 10;
-    document.getElementById('tsm_tar').value   = (typeof d.tariffPerKwh === 'number') ? d.tariffPerKwh : 0;
+    if (typeof d.tariff === 'number') document.getElementById('tsm_tar').value = d.tariff;
     if (typeof d.currency === 'string') document.getElementById('tsm_cur').value = d.currency;
     refreshPowerStats();
   }).catch(function(e){console.warn('selectPowerTab:', e);});
@@ -2776,8 +2782,8 @@ static void handleGetPowerConfig() {
   doc["pollInterval"]    = s.pollInterval;
   doc["autoOffEnabled"]  = s.autoOffEnabled;
   doc["autoOffDelayMin"] = s.autoOffDelayMin;
-  doc["tariffPerKwh"]    = s.tariffPerKwh;
-  doc["currency"]        = tasmotaCurrency;
+  doc["tariff"]          = tasmotaTariffPerKwh;   // global
+  doc["currency"]        = tasmotaCurrency;       // global
 #if TASMOTA_PLUG_COUNT == 1
   doc["assignedSlot"]    = s.assignedSlot;
 #endif
@@ -2805,9 +2811,15 @@ static void handleGetPowerStats() {
 }
 
 static void handleSavePower() {
-  // Currency is global - update if present regardless of plug index
+  // Currency and tariff are global - update if present regardless of plug index
   if (server.hasArg("tsm_cur")) {
     strlcpy(tasmotaCurrency, server.arg("tsm_cur").c_str(), sizeof(tasmotaCurrency));
+  }
+  if (server.hasArg("tsm_tar")) {
+    float t = server.arg("tsm_tar").toFloat();
+    if (t < 0.0f) t = 0.0f;
+    if (t > 10.0f) t = 10.0f;
+    tasmotaTariffPerKwh = t;
   }
 
   int plug = server.hasArg("plug") ? server.arg("plug").toInt() : 0;
@@ -2829,12 +2841,6 @@ static void handleSavePower() {
   if (server.hasArg("tsm_ad")) {
     int ad = server.arg("tsm_ad").toInt();
     s.autoOffDelayMin = (ad >= 1 && ad <= 240) ? (uint8_t)ad : 10;
-  }
-  if (server.hasArg("tsm_tar")) {
-    float t = server.arg("tsm_tar").toFloat();
-    if (t < 0.0f) t = 0.0f;
-    if (t > 10.0f) t = 10.0f;
-    s.tariffPerKwh = t;
   }
 #if TASMOTA_PLUG_COUNT == 1
   if (server.hasArg("tsm_slot")) {
@@ -2971,6 +2977,7 @@ static void handleSettingsExport() {
   // Tasmota power monitoring
   JsonObject tsm = doc["tasmota"].to<JsonObject>();
   tsm["currency"] = tasmotaCurrency;
+  tsm["tariff"]   = tasmotaTariffPerKwh;
   JsonArray plugs = tsm["plugs"].to<JsonArray>();
   for (uint8_t i = 0; i < TASMOTA_PLUG_COUNT; i++) {
     JsonObject p = plugs.add<JsonObject>();
@@ -2980,7 +2987,6 @@ static void handleSettingsExport() {
     p["pollInterval"]    = tasmotaSettings[i].pollInterval;
     p["autoOffEnabled"]  = tasmotaSettings[i].autoOffEnabled;
     p["autoOffDelayMin"] = tasmotaSettings[i].autoOffDelayMin;
-    p["tariffPerKwh"]    = tasmotaSettings[i].tariffPerKwh;
 #if TASMOTA_PLUG_COUNT == 1
     p["assignedSlot"]    = tasmotaSettings[i].assignedSlot;
 #endif
@@ -3241,6 +3247,21 @@ static void handleSettingsImportFinish() {
       if (tsmObj["currency"].is<const char*>()) {
         strlcpy(tasmotaCurrency, tsmObj["currency"], sizeof(tasmotaCurrency));
       }
+      if (tsmObj["tariff"].is<float>() || tsmObj["tariff"].is<double>() || tsmObj["tariff"].is<int>()) {
+        float t = tsmObj["tariff"].as<float>();
+        if (t < 0.0f) t = 0.0f;
+        if (t > 10.0f) t = 10.0f;
+        tasmotaTariffPerKwh = t;
+      } else if (plugs && plugs.size() > 0) {
+        // Back-compat: lift tariff from first plug entry if global field absent.
+        JsonObject p0 = plugs[0].as<JsonObject>();
+        if (p0["tariffPerKwh"].is<float>() || p0["tariffPerKwh"].is<double>() || p0["tariffPerKwh"].is<int>()) {
+          float t = p0["tariffPerKwh"].as<float>();
+          if (t < 0.0f) t = 0.0f;
+          if (t > 10.0f) t = 10.0f;
+          tasmotaTariffPerKwh = t;
+        }
+      }
     }
     // Helper lambda: apply one plug object into tasmotaSettings[idx]
     auto applyPlug = [](uint8_t idx, JsonObject p) {
@@ -3259,12 +3280,6 @@ static void handleSettingsImportFinish() {
         uint8_t ad = p["autoOffDelayMin"].as<uint8_t>();
         if (ad < 1 || ad > 240) ad = 10;
         s.autoOffDelayMin = ad;
-      }
-      if (p["tariffPerKwh"].is<float>() || p["tariffPerKwh"].is<double>() || p["tariffPerKwh"].is<int>()) {
-        float t = p["tariffPerKwh"].as<float>();
-        if (t < 0.0f) t = 0.0f;
-        if (t > 10.0f) t = 10.0f;
-        s.tariffPerKwh = t;
       }
 #if TASMOTA_PLUG_COUNT == 1
       if (p["assignedSlot"].is<uint8_t>()) {
