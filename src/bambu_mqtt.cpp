@@ -42,14 +42,21 @@ bool mqttDebugLog = false;
 
 static void mqttCallback(char* topic, byte* payload, unsigned int length);
 
+static bool isP2SSerial(const char* serial) {
+  return serial && strncmp(serial, "22E", 3) == 0;
+}
+
 // Printers that report the door sensor in home_flag bit 23 (per Bambu Lab wiki
-// + ha-bambulab convention): X1C "00M", X1E "03W", P2S "22E".
-// H2 series uses "stat" instead; P1/A1 have no door sensor.
+// + ha-bambulab convention): X1C "00M", X1E "03W".
+// H2 series and P2S use "stat" instead; P1/A1 have no door sensor.
 static bool usesHomeFlagDoorSensor(const char* serial) {
   if (!serial) return false;
   return strncmp(serial, "00M", 3) == 0 ||   // X1C
-         strncmp(serial, "03W", 3) == 0 ||   // X1E
-         strncmp(serial, "22E", 3) == 0;     // P2S
+         strncmp(serial, "03W", 3) == 0;     // X1E
+}
+
+static bool usesStatDoorSensor(bool dualNozzle, const char* serial) {
+  return dualNozzle || isP2SSerial(serial);
 }
 
 
@@ -293,7 +300,7 @@ static void parseMqttPayload(byte* payload, unsigned int length, BambuState& s, 
   pf["fan_gear"] = true;   // packed PWM 0-255 per fan (byte0=part, byte1=aux, byte2=chamber)
   pf["wifi_signal"] = true;
   pf["spd_lvl"] = true;
-  pf["stat"] = true;       // H2 door sensor (hex string, bit 0x00800000 = door open)
+  pf["stat"] = true;       // H2/P2S door sensor (hex string, bit 0x00800000 = door open)
   pf["home_flag"] = true;  // X1 series door sensor (int, bit 23 = door open)
   // Note: H2D/H2C extruder data is parsed separately from raw payload (see below)
 
@@ -857,22 +864,24 @@ static void parseMqttPayload(byte* payload, unsigned int length, BambuState& s, 
     s.speedLevel = print["spd_lvl"].as<int>();
 
   // Door sensor: model-specific field and bit layout.
-  //   - H2D/H2C (dualNozzle): "stat" hex string, bit 0x00800000 = door open.
+  //   - H2D/H2C (dualNozzle) and P2S ("22E"): "stat" hex string, bit
+  //     0x00800000 = door open.
   //     H2C sends 9+ hex digits (>32 bit), must use strtoull.
   //     Note: X1C also sends "stat" but with different semantics (bit 23 is
-  //     always set there), so gate this path to dual-nozzle H2 printers.
-  //   - X1C ("00M"), X1E ("03W"), P2S ("22E"): "home_flag" int, bit 23 = door
-  //     open. Matches ha-bambulab convention.
+  //     always set there), so gate this path to H2/P2S printers.
+  //   - X1C ("00M"), X1E ("03W"): "home_flag" int, bit 23 = door open.
+  //     Matches ha-bambulab convention.
   //   - P1/A1: no door sensor - nothing to parse.
-  if (s.dualNozzle && print["stat"].is<const char*>()) {
+  if (usesStatDoorSensor(s.dualNozzle, serial) && print["stat"].is<const char*>()) {
     uint64_t statVal = strtoull(print["stat"].as<const char*>(), nullptr, 16);
     bool wasOpen = s.doorOpen;
-    s.doorOpen = (statVal & 0x00800000) != 0;
+    s.doorOpen = (statVal & 0x00800000ULL) != 0;
+    const char* source = s.dualNozzle ? "H2 stat" : "P2S stat";
     if (!s.doorSensorPresent) {
       s.doorSensorPresent = true;
-      MQTT_LOG("door sensor detected (H2 stat=0x%llX, door=%s)", statVal, s.doorOpen ? "OPEN" : "CLOSED");
+      MQTT_LOG("door sensor detected (%s=0x%llX, door=%s)", source, statVal, s.doorOpen ? "OPEN" : "CLOSED");
     } else if (s.doorOpen != wasOpen) {
-      MQTT_LOG("door %s (H2 stat=0x%llX)", s.doorOpen ? "OPENED" : "CLOSED", statVal);
+      MQTT_LOG("door %s (%s=0x%llX)", s.doorOpen ? "OPENED" : "CLOSED", source, statVal);
     }
   } else if (usesHomeFlagDoorSensor(serial) && print["home_flag"].is<int32_t>()) {
     uint32_t homeFlag = (uint32_t)print["home_flag"].as<int32_t>();

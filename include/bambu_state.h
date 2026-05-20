@@ -78,7 +78,7 @@ struct BambuState {
   uint8_t speedLevel;         // 1=silent, 2=standard, 3=sport, 4=ludicrous
   bool dualNozzle;            // H2D/H2C dual extruder detected
   uint8_t activeNozzle;       // 0=right, 1=left (only when dualNozzle)
-  bool doorOpen;              // door/enclosure open (H2: stat bit 0x00800000, X1: home_flag bit 23)
+  bool doorOpen;              // door/enclosure open (H2/P2S: stat bit 0x00800000, X1: home_flag bit 23)
   bool doorSensorPresent;     // true once a door-capable printer has reported its door field
   unsigned long lastUpdate;       // millis() of last MQTT message (any)
   unsigned long lastPrintDataMs;  // millis() of last core print data (temps, fans, progress, state)
