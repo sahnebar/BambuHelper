@@ -538,7 +538,7 @@ public:
 static LGFX_SenseCAP _tft_instance;
 
 #else
-  #error "No board variant defined. Add BOARD_IS_S3_ZERO, BOARD_IS_S3, DISPLAY_CYD, BOARD_IS_C3, BOARD_IS_WS200, BOARD_IS_WS280, BOARD_IS_WS154, BOARD_IS_JC3248W535 or BOARD_IS_SENSECAP to build_flags."
+  #error "No board variant defined. Set BOARD_IS_<NAME> in your env's build_flags - see platformio.ini / boards/*.ini for the list of supported boards."
 #endif
 
 // Global pointer + reference — accessed via `tft` throughout the codebase.
@@ -815,8 +815,8 @@ void initDisplay() {
   _tft_instance.init();  // LovyanGFX configures SPI from the board class above
 #if defined(DISPLAY_CYD)
   applyCydPanelInversion();
-#elif defined(BOARD_IS_S3_ZERO) || defined(BOARD_IS_S3) || defined(BOARD_IS_C3) || defined(BOARD_IS_WS200) || defined(BOARD_IS_WS280) || defined(BOARD_IS_WS154) || defined(BOARD_IS_TZT_2432)
-  _tft_instance.invertDisplay(true);  // ST7789 requires color inversion
+#elif defined(USE_ST7789_INVERT)
+  _tft_instance.invertDisplay(true);  // ST7789 panels need color inversion
 #elif defined(BOARD_IS_SENSECAP)
   // ST7701S IPS inversion already handled by default Panel_ST7701 init (0x21 command).
   // Release SPI CS HIGH now that init commands are done
