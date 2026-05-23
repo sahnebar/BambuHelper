@@ -200,6 +200,10 @@
 #define LY_LAND_AP_IP_Y         LY_AP_IP_Y
 #define LY_LAND_CLK_CLEAR_Y     LY_CLK_CLEAR_Y
 #define LY_LAND_CLK_CLEAR_H     LY_CLK_CLEAR_H
+#define LY_LAND_HDR_Y           LY_HDR_Y
+#define LY_LAND_HDR_H           LY_HDR_H
+#define LY_LAND_HDR_CY          LY_HDR_CY
+#define LY_LAND_HDR_DOT_CY      LY_HDR_DOT_CY
 
 // --- Pong/Breakout clock (portrait, 240x320) ---
 #define LY_ARK_BRICK_ROWS   5

@@ -1398,30 +1398,41 @@ static void drawIdleDrying(PrinterSlot& p) {
   }
 
   // === Header bar ===
+#if defined(LAYOUT_HAS_LANDSCAPE)
+  const int16_t dryHdrY    = land ? LY_LAND_HDR_Y     : LY_HDR_Y;
+  const int16_t dryHdrH    = land ? LY_LAND_HDR_H     : LY_HDR_H;
+  const int16_t dryHdrCY   = land ? LY_LAND_HDR_CY    : LY_HDR_CY;
+  const int16_t dryHdrDotCY = land ? LY_LAND_HDR_DOT_CY : LY_HDR_DOT_CY;
+#else
+  const int16_t dryHdrY    = LY_HDR_Y;
+  const int16_t dryHdrH    = LY_HDR_H;
+  const int16_t dryHdrCY   = LY_HDR_CY;
+  const int16_t dryHdrDotCY = LY_HDR_DOT_CY;
+#endif
   if (forceRedraw) {
     markFrameDirty();
-    tft.fillRect(0, LY_HDR_Y, scrW, LY_HDR_H, CLR_BG);
+    tft.fillRect(0, dryHdrY, scrW, dryHdrH, CLR_BG);
 
     // Printer name (left)
     tft.setTextDatum(ML_DATUM);
     setFont(tft, FONT_BODY);
     tft.setTextColor(CLR_TEXT, CLR_BG);
     const char* name = (p.config.name[0] != '\0') ? p.config.name : "Bambu";
-    tft.drawString(name, LY_HDR_NAME_X, LY_HDR_CY);
+    tft.drawString(name, LY_HDR_NAME_X, dryHdrCY);
 
     // "DRYING" badge (right, orange)
     tft.setTextDatum(MR_DATUM);
     tft.setTextColor(CLR_ORANGE, CLR_BG);
     const char* badge = "DRYING";
-    tft.fillCircle(scrW - LY_HDR_BADGE_RX - tft.textWidth(badge) - 10, LY_HDR_CY, 4, CLR_ORANGE);
-    tft.drawString(badge, scrW - LY_HDR_BADGE_RX, LY_HDR_CY);
+    tft.fillCircle(scrW - LY_HDR_BADGE_RX - tft.textWidth(badge) - 10, dryHdrCY, 4, CLR_ORANGE);
+    tft.drawString(badge, scrW - LY_HDR_BADGE_RX, dryHdrCY);
 
     // Multi-printer dots
     if (getActiveConnCount() > 1) {
       for (uint8_t di = 0; di < MAX_ACTIVE_PRINTERS; di++) {
         if (!isPrinterConfigured(di)) continue;
         uint16_t dotClr = (di == rotState.displayIndex) ? CLR_GREEN : CLR_TEXT_DARK;
-        tft.fillCircle(cx - 5 + di * 10, LY_HDR_DOT_CY, 3, dotClr);
+        tft.fillCircle(cx - 5 + di * 10, dryHdrDotCY, 3, dotClr);
       }
     }
   }
@@ -2663,10 +2674,21 @@ static void drawPrinting() {
     drawLedProgressBar(tft, 0, s.progress);
   }
 
-  // === Header bar (y=7-25) ===
+  // === Header bar ===
   // In landscape with AMS column the badge is rendered separately by
   // drawAmsZone in the right column, so the header carries only printer
   // name + multi-printer dots.
+#if defined(LAYOUT_HAS_LANDSCAPE)
+  const int16_t hdrY     = land ? LY_LAND_HDR_Y     : LY_HDR_Y;
+  const int16_t hdrH     = land ? LY_LAND_HDR_H     : LY_HDR_H;
+  const int16_t hdrCY    = land ? LY_LAND_HDR_CY    : LY_HDR_CY;
+  const int16_t hdrDotCY = land ? LY_LAND_HDR_DOT_CY : LY_HDR_DOT_CY;
+#else
+  const int16_t hdrY     = LY_HDR_Y;
+  const int16_t hdrH     = LY_HDR_H;
+  const int16_t hdrCY    = LY_HDR_CY;
+  const int16_t hdrDotCY = LY_HDR_DOT_CY;
+#endif
   if (forceRedraw || stateChanged) {
     markFrameDirty();
     uint16_t hdrBg = dispSettings.bgColor;
@@ -2678,14 +2700,14 @@ static void drawPrinting() {
 #else
     const int16_t hdrClearW = hdrW;
 #endif
-    tft.fillRect(0, LY_HDR_Y, hdrClearW, LY_HDR_H, hdrBg);
+    tft.fillRect(0, hdrY, hdrClearW, hdrH, hdrBg);
 
     // Printer name (left)
     tft.setTextDatum(ML_DATUM);
     setFont(tft, FONT_BODY);
     tft.setTextColor(CLR_TEXT, hdrBg);
     const char* name = (p.config.name[0] != '\0') ? p.config.name : "Bambu P1S";
-    tft.drawString(name, LY_HDR_NAME_X, LY_HDR_CY);
+    tft.drawString(name, LY_HDR_NAME_X, hdrCY);
 
     // State badge (right) — only when right column not used for it
     if (!landAmsCol) {
@@ -2698,8 +2720,8 @@ static void drawPrinting() {
       tft.setTextDatum(MR_DATUM);
       tft.setTextColor(badgeColor, hdrBg);
       setFont(tft, FONT_BODY);
-      tft.fillCircle(hdrW - LY_HDR_BADGE_RX - tft.textWidth(s.gcodeState) - 10, LY_HDR_CY, 4, badgeColor);
-      tft.drawString(s.gcodeState, hdrW - LY_HDR_BADGE_RX, LY_HDR_CY);
+      tft.fillCircle(hdrW - LY_HDR_BADGE_RX - tft.textWidth(s.gcodeState) - 10, hdrCY, 4, badgeColor);
+      tft.drawString(s.gcodeState, hdrW - LY_HDR_BADGE_RX, hdrCY);
     }
 
     // Printer indicator dots (multi-printer) — centered on the visible
@@ -2708,7 +2730,7 @@ static void drawPrinting() {
       for (uint8_t di = 0; di < MAX_ACTIVE_PRINTERS; di++) {
         if (!isPrinterConfigured(di)) continue;
         uint16_t dotClr = (di == rotState.displayIndex) ? CLR_GREEN : CLR_TEXT_DARK;
-        tft.fillCircle(hdrClearW / 2 - 5 + di * 10, LY_HDR_DOT_CY, 3, dotClr);
+        tft.fillCircle(hdrClearW / 2 - 5 + di * 10, hdrDotCY, 3, dotClr);
       }
     }
   }
@@ -3262,32 +3284,43 @@ static void drawFinished() {
     drawLedProgressBar(tft, 0, 100);
   }
 
-  // === Header bar (y=7-25) — same as printing screen ===
+  // === Header bar — same as printing screen ===
+#if defined(LAYOUT_HAS_LANDSCAPE)
+  const int16_t finHdrY     = land ? LY_LAND_HDR_Y     : LY_HDR_Y;
+  const int16_t finHdrH     = land ? LY_LAND_HDR_H     : LY_HDR_H;
+  const int16_t finHdrCY    = land ? LY_LAND_HDR_CY    : LY_HDR_CY;
+  const int16_t finHdrDotCY = land ? LY_LAND_HDR_DOT_CY : LY_HDR_DOT_CY;
+#else
+  const int16_t finHdrY     = LY_HDR_Y;
+  const int16_t finHdrH     = LY_HDR_H;
+  const int16_t finHdrCY    = LY_HDR_CY;
+  const int16_t finHdrDotCY = LY_HDR_DOT_CY;
+#endif
   if (forceRedraw) {
     markFrameDirty();
     uint16_t hdrBg = dispSettings.bgColor;
-    tft.fillRect(0, LY_HDR_Y, scrW, LY_HDR_H, hdrBg);
+    tft.fillRect(0, finHdrY, scrW, finHdrH, hdrBg);
 
     // Printer name (left)
     tft.setTextDatum(ML_DATUM);
     setFont(tft, FONT_BODY);
     tft.setTextColor(CLR_TEXT, hdrBg);
     const char* name = (p.config.name[0] != '\0') ? p.config.name : "Printer";
-    tft.drawString(name, LY_HDR_NAME_X, LY_HDR_CY);
+    tft.drawString(name, LY_HDR_NAME_X, finHdrCY);
 
     // FINISH badge (right)
     tft.setTextDatum(MR_DATUM);
     tft.setTextColor(CLR_GREEN, hdrBg);
     setFont(tft, FONT_BODY);
-    tft.fillCircle(scrW - LY_HDR_BADGE_RX - tft.textWidth("FINISH") - 10, LY_HDR_CY, 4, CLR_GREEN);
-    tft.drawString("FINISH", scrW - LY_HDR_BADGE_RX, LY_HDR_CY);
+    tft.fillCircle(scrW - LY_HDR_BADGE_RX - tft.textWidth("FINISH") - 10, finHdrCY, 4, CLR_GREEN);
+    tft.drawString("FINISH", scrW - LY_HDR_BADGE_RX, finHdrCY);
 
     // Printer indicator dots (multi-printer)
     if (getActiveConnCount() > 1) {
       for (uint8_t di = 0; di < MAX_ACTIVE_PRINTERS; di++) {
         if (!isPrinterConfigured(di)) continue;
         uint16_t dotClr = (di == rotState.displayIndex) ? CLR_GREEN : CLR_TEXT_DARK;
-        tft.fillCircle(cx - 5 + di * 10, LY_HDR_DOT_CY, 3, dotClr);
+        tft.fillCircle(cx - 5 + di * 10, finHdrDotCY, 3, dotClr);
       }
     }
   }

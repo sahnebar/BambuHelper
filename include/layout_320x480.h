@@ -181,6 +181,16 @@
 #define LY_LAND_AMS_BOT_SHORT 280
 #define LY_LAND_AMS_BOT_FULL  318
 
+// --- Header bar (landscape) ---
+// Portrait header is 26 px tall (y=10..36) and collides with the gauge row 1
+// top edge (LY_LAND_ROW1=76, gauge top y=28) in landscape. Use the same
+// compact header as CYD/ws_lcd_200 (y=7..27, h=20) so the fillRect band
+// stops 1 px above the gauge top and does not eat into the arc.
+#define LY_LAND_HDR_Y         7
+#define LY_LAND_HDR_H         20
+#define LY_LAND_HDR_CY        17
+#define LY_LAND_HDR_DOT_CY    10
+
 // --- Header badge (landscape, right column) ---
 #define LY_LAND_BADGE_Y       7
 #define LY_LAND_BADGE_H       23
