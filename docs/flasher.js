@@ -233,7 +233,10 @@ async function monitorDisconnect() {
   if (!_monitorPort) return;
   setMonitorStatus('Disconnecting...');
   try { if (_monitorReader) await _monitorReader.cancel(); } catch (_) {}
-  while (_monitorReadLoopRunning) {
+  // Wait up to 1s for the read loop to exit. Watchdog avoids ever hanging
+  // the page if the reader misbehaves.
+  const startedAt = Date.now();
+  while (_monitorReadLoopRunning && Date.now() - startedAt < 1000) {
     await new Promise((r) => setTimeout(r, 20));
   }
   try { await _monitorPort.close(); } catch (_) {}
@@ -247,21 +250,20 @@ async function monitorReadLoop() {
   _monitorReadLoopRunning = true;
   const decoder = new TextDecoder();
   try {
-    while (_monitorPort && _monitorPort.readable) {
-      const reader = _monitorPort.readable.getReader();
-      _monitorReader = reader;
-      try {
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          if (value && value.byteLength) {
-            appendMonitorOutput(decoder.decode(value, { stream: true }));
-          }
+    if (!_monitorPort || !_monitorPort.readable) return;
+    const reader = _monitorPort.readable.getReader();
+    _monitorReader = reader;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        if (value && value.byteLength) {
+          appendMonitorOutput(decoder.decode(value, { stream: true }));
         }
-      } finally {
-        reader.releaseLock();
-        _monitorReader = null;
       }
+    } finally {
+      try { reader.releaseLock(); } catch (_) {}
+      _monitorReader = null;
     }
   } finally {
     _monitorReadLoopRunning = false;
