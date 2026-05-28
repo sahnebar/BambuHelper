@@ -3,7 +3,7 @@
  * Ported from TFTClock project, adapted for TFT_eSPI.
  *
  * Ball bounces off paddle and breaks colored brick rows.
- * On minute change, digits break apart with fragment effects.
+ * On minute change, digits bounce to their next values.
  */
 
 #include "clock_pong.h"
@@ -52,7 +52,6 @@
 #define ARK_PADDLE_SPEED  4
 #endif
 #define ARK_UPDATE_MS     20    // ~50fps
-#define ARK_MAX_FRAGS     20
 #define ARK_TIME_OVERRIDE_MS 60000
 #define ARK_PADDLE_JITTER_DEG 4.0f
 #define ARK_STICKY_JITTER_DEG 10.0f
@@ -75,12 +74,6 @@ static_assert(ARK_BRICK_COLS <= ARK_MAX_BRICK_COLS,
               "ARK_BRICK_COLS exceeds arkBricks storage");
 static_assert(ARK_LAND_BRICK_COLS <= ARK_MAX_BRICK_COLS,
               "ARK_LAND_BRICK_COLS exceeds arkBricks storage");
-
-// ========== Fragment struct ==========
-struct PongFragment {
-  float x, y, vx, vy;
-  bool active;
-};
 
 struct PongLayout {
   int16_t screenW;
@@ -139,11 +132,7 @@ static bool timeOverridden = false;
 static unsigned long timeOverrideStart = 0;
 
 static int targetDigits[4], targetValues[4];
-static int numTargets = 0, currentTarget = 0;
-static bool breaking = false;
-
-static PongFragment frags[ARK_MAX_FRAGS];
-static int fragTimer = 0;
+static int numTargets = 0;
 
 // Digit bounce
 static float digitOffsetY[5] = {0};
@@ -260,7 +249,11 @@ static void clearBrick(int r, int c) {
   const PongLayout& layout = pongLayout;
   int x = layout.brickStartX + c * (ARK_BRICK_W + ARK_BRICK_GAP);
   int y = layout.brickStartY + r * (ARK_BRICK_H + ARK_BRICK_GAP);
-  tft.fillRect(x, y, ARK_BRICK_W, ARK_BRICK_H, TFT_BLACK);
+  int clearX = max(0, x - ARK_BRICK_GAP);
+  int clearY = max(0, y - ARK_BRICK_GAP);
+  int clearR = min((int)layout.screenW, x + ARK_BRICK_W + ARK_BRICK_GAP);
+  int clearB = min((int)layout.screenH, y + ARK_BRICK_H + ARK_BRICK_GAP);
+  tft.fillRect(clearX, clearY, clearR - clearX, clearB - clearY, TFT_BLACK);
 }
 
 // ========== Ball ==========
@@ -397,14 +390,16 @@ static void updatePaddle() {
 
   int target;
   if (ballActive && ballVY > 0) {
-    // Ball falling - follow ball X position with slight offset for variety
-    target = (int)ballX;
+    target = (int)(ballX + ARK_BALL_SIZE / 2.0f);
   } else {
     // Ball going up - drift toward center for variety
     target = layout.screenW / 2;
   }
-  if (paddleX < target - 2) paddleX += ARK_PADDLE_SPEED;
-  else if (paddleX > target + 2) paddleX -= ARK_PADDLE_SPEED;
+  int diff = target - paddleX;
+  if (abs(diff) > 2) {
+    int step = min(ARK_PADDLE_SPEED, abs(diff));
+    paddleX += (diff > 0) ? step : -step;
+  }
   if (paddleX < layout.paddleW / 2) paddleX = layout.paddleW / 2;
   if (paddleX > layout.screenW - layout.paddleW / 2)
     paddleX = layout.screenW - layout.paddleW / 2;
@@ -498,44 +493,6 @@ static void updateBallPhysics() {
   if (arkBrickCount <= 0) { initBricks(); drawAllBricks(); }
 }
 
-// ========== Fragments ==========
-static void spawnDigitFragments(int dx, int dy) {
-  for (int i = 0; i < ARK_MAX_FRAGS; i++) {
-    frags[i].active = true;
-    frags[i].x = dx + random(0, DIGIT_W);
-    frags[i].y = dy + random(0, DIGIT_H);
-    frags[i].vx = random(-30, 30) / 10.0f;
-    frags[i].vy = random(-40, -10) / 10.0f;
-  }
-  fragTimer = 30;
-}
-
-static void updateFragments() {
-  const PongLayout& layout = pongLayout;
-  if (fragTimer <= 0) return;
-  fragTimer--;
-  for (int i = 0; i < ARK_MAX_FRAGS; i++) {
-    if (!frags[i].active) continue;
-    tft.fillRect((int)frags[i].x, (int)frags[i].y, 3, 3, TFT_BLACK);
-    frags[i].x += frags[i].vx;
-    frags[i].y += frags[i].vy;
-    frags[i].vy += 0.3f;
-    if (frags[i].y > layout.screenH || frags[i].x < -10 || frags[i].x > layout.screenW + 10) {
-      frags[i].active = false;
-      continue;
-    }
-    tft.fillRect((int)frags[i].x, (int)frags[i].y, 3, 3, brickColors[random(0, BRICK_COLOR_COUNT)]);
-  }
-  if (fragTimer == 0) {
-    for (int i = 0; i < ARK_MAX_FRAGS; i++) {
-      if (frags[i].active) {
-        tft.fillRect((int)frags[i].x, (int)frags[i].y, 3, 3, TFT_BLACK);
-        frags[i].active = false;
-      }
-    }
-  }
-}
-
 // ========== Calculate which digits change ==========
 static void calcTargets(int hour, int mn) {
   numTargets = 0;
@@ -553,7 +510,7 @@ static void calcTargets(int hour, int mn) {
   }
 }
 
-// ========== Update a digit value after break ==========
+// ========== Update a digit value after transition ==========
 static void applyDigitValue(int di, int dv) {
   int ht = dispHour / 10, ho = dispHour % 10;
   int mt = dispMin / 10, mo = dispMin % 10;
@@ -708,7 +665,6 @@ void tickPongClock() {
     initialized = true;
     lastMinute = now.tm_min;
     for (int i = 0; i < 5; i++) { prevDigitY[i] = 0; digitOffsetY[i] = 0; digitVelocity[i] = 0; }
-    for (int i = 0; i < ARK_MAX_FRAGS; i++) frags[i].active = false;
     memset(prevDigits, 0, sizeof(prevDigits));
     prevColon = false;
     prevBallX = -1;
@@ -741,8 +697,8 @@ void tickPongClock() {
   // Detect minute change
   if (curMin != lastMinute) { lastMinute = curMin; animTriggered = false; }
 
-  // Trigger digit transition at second 56 — all changing digits update
-  // at once with a bounce animation (no fragment explosion)
+  // Trigger digit transition at second 56: all changing digits update
+  // at once with a bounce animation.
   if (sec >= 56 && !animTriggered) {
     animTriggered = true;
     calcTargets(dispHour, dispMin);

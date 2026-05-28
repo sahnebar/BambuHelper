@@ -258,20 +258,17 @@ public:
   }
 
   // -------------------------------------------------------------------------
-  // Direct push escape-hatch: call _agfx->writePixels() with the whole
-  // contiguous pixel buffer in ONE call. Arduino_ESP32QSPI::writePixels
+  // Direct push escape-hatch: call _agfx->writeBytes() with the whole
+  // contiguous pixel buffer in ONE call. Arduino_ESP32QSPI::writeBytes
   // then handles it as one CS cycle with a single RAMWRC header followed
-  // by internal VARIABLE-flag continuation chunks. This is the only way
-  // to push a large framebuffer without the chip getting confused by
-  // multiple RAMWRC commands from chunked calls. Intended for full-frame
-  // sprite flushes (e.g. pushing a PSRAM LGFX_Sprite as one atomic frame).
+  // by internal VARIABLE-flag continuation chunks, without Arduino_GFX's
+  // RGB565 byte-swapping/staging path. This is the only way to push a large
+  // framebuffer without the chip getting confused by multiple RAMWRC commands
+  // from chunked calls. Intended for full-frame sprite flushes (e.g. pushing a
+  // PSRAM LGFX_Sprite as one atomic frame).
   //
-  // NOT REENTRANT and NOT THREAD-SAFE: `data` is byte-swapped in place
-  // before the QSPI write and swapped back afterwards. No other code may
-  // read from or write into the buffer between the two swap loops. There
-  // are intentionally no early returns between them; do not add any.
-  // BambuHelper only calls this from loop() on core 1, and nothing else
-  // touches the framebuffer sprite, so the invariant is upheld.
+  // Single-caller display path: BambuHelper only calls this from loop() on
+  // core 1, and nothing else touches the framebuffer sprite during the push.
   // -------------------------------------------------------------------------
   void pushRawPixels(uint16_t* data, uint32_t length) {
     if (!_agfx || length == 0) return;
@@ -282,24 +279,10 @@ public:
       xSemaphoreTake(_te_sem, 0);
       xSemaphoreTake(_te_sem, pdMS_TO_TICKS(50));
     }
-    // Arduino_GFX's MSB_32_16_16_SET byte-swaps each pixel from native LE
-    // to big-endian MSB-first before DMA, which is the MIPI DCS convention
-    // for 16bpp pixel data. But this chip in QSPI mode evidently reads
-    // pixels LSB-first (observed: RED→BLUE, GREEN→RED, BLUE→GREEN,
-    // YELLOW→MAGENTA — exactly the pattern of byte-swapped RGB565). Pre-
-    // swap here to cancel Arduino_GFX's swap so the net wire byte order
-    // matches what the chip expects. Restore the sprite buffer afterwards
-    // so repeat pushes work.
-    for (uint32_t i = 0; i < length; ++i) {
-      data[i] = __builtin_bswap16(data[i]);
-    }
     _agfx->startWrite();
     _agfx->writeAddrWindow(0, 0, _cfg.panel_width, _cfg.panel_height);
-    _agfx->writePixels(data, length);
+    _agfx->writeBytes(reinterpret_cast<uint8_t*>(data), length * sizeof(uint16_t));
     _agfx->endWrite();
-    for (uint32_t i = 0; i < length; ++i) {
-      data[i] = __builtin_bswap16(data[i]);
-    }
   }
 
   // -------------------------------------------------------------------------
