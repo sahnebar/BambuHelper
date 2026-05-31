@@ -81,6 +81,7 @@ struct BambuState {
                               // X2D reports 0/2/5/6 — checking specific bits is more precise than
                               // a single "has airduct" boolean.
   int8_t wifiSignal;          // RSSI in dBm
+  char localIp[16];           // printer LAN IP from pushall print.net.info[].ip (LE uint32), "" if unknown
   uint8_t speedLevel;         // 1=silent, 2=standard, 3=sport, 4=ludicrous
   bool dualNozzle;            // H2D/H2C dual extruder detected
   uint8_t activeNozzle;       // 0=right, 1=left (only when dualNozzle)

@@ -4,6 +4,8 @@
 #include "settings.h"
 #include "config.h"
 #include "layout.h"
+#include "bambu_state.h"
+#include "bambu_mqtt.h"
 #include <time.h>
 
 // Base (1x) digit metrics for the simple clock. Layout-agnostic on purpose:
@@ -81,6 +83,10 @@ static int   prevTimeX0 = -1;
 static bool  prevUse24h = true;
 static bool  prevHideDate = false;
 
+// --- Printer info footer (name + LAN IP per configured printer) ---
+static char prevInfoLines[MAX_ACTIVE_PRINTERS][40] = {{0}};
+static int  prevInfoCount = 0;
+
 void resetClock() {
   prevMinute = -1;
   memset(prevDigits, 0, sizeof(prevDigits));
@@ -95,6 +101,70 @@ void resetClock() {
   prevTimeX0 = -1;
   prevUse24h = true;
   prevHideDate = false;
+  for (int i = 0; i < MAX_ACTIVE_PRINTERS; i++) prevInfoLines[i][0] = '\0';
+  prevInfoCount = 0;
+}
+
+// Footer on the idle/clock screen: one line per configured printer with its
+// friendly name and LAN IP. Anchored to the bottom edge so its position is
+// independent of the clock size/date - guaranteeing it never overlaps even the
+// largest clock (and keeping it outside the clock's redraw band). Only repaints
+// when the line set changes, so it costs nothing on a steady screen.
+static void drawClockInfo(int sw, int sh, int clockBottom, uint16_t bg, uint16_t clr) {
+  char lines[MAX_ACTIVE_PRINTERS][40];
+  int count = 0;
+
+  if (dispSettings.showClockInfo) {
+    for (uint8_t i = 0; i < MAX_ACTIVE_PRINTERS; i++) {
+      if (!isPrinterConfigured(i)) continue;
+      const PrinterConfig& cfg = printers[i].config;
+      const char* name = (cfg.name[0] != '\0') ? cfg.name : "Printer";
+      // Prefer the IP reported by the printer (works in cloud mode too); fall
+      // back to the configured LAN IP before the first pushall arrives.
+      const char* ip = (printers[i].state.localIp[0] != '\0') ? printers[i].state.localIp
+                     : (cfg.ip[0] != '\0') ? cfg.ip : nullptr;
+      if (ip)
+        snprintf(lines[count], sizeof(lines[count]), "%s  %s", name, ip);
+      else
+        snprintf(lines[count], sizeof(lines[count]), "%s", name);
+      if (++count >= MAX_ACTIVE_PRINTERS) break;
+    }
+  }
+
+  // Nothing changed since last paint? leave the screen alone.
+  bool changed = (count != prevInfoCount);
+  for (int i = 0; i < count && !changed; i++)
+    if (strcmp(lines[i], prevInfoLines[i]) != 0) changed = true;
+  if (!changed) return;
+
+  setFont(tft, FONT_BODY);
+  tft.setTextSize(1);
+  const int lineH = tft.fontHeight() + 3;
+  const int bottomMargin = 4;
+  const int maxRows = (count > prevInfoCount) ? count : prevInfoCount;
+  const int blockTop = sh - bottomMargin - maxRows * lineH;
+
+  // Clear the whole footer band (covers shrinking line counts too).
+  tft.fillRect(0, blockTop, sw, maxRows * lineH + bottomMargin, bg);
+  markFrameDirty();
+
+  tft.setTextDatum(MC_DATUM);
+  tft.setTextColor(clr, bg);
+  for (int i = 0; i < count; i++) {
+    const int rowY = sh - bottomMargin - (count - i) * lineH + lineH / 2;
+    // Hard guarantee against overlapping the clock: if a line would collide we
+    // simply drop it rather than shrink the clock. At FONT_BODY size this can
+    // happen on a short panel with a tall clock (e.g. 240x320 + Large clock +
+    // two printers); every other combination has room.
+    if (rowY - lineH / 2 < clockBottom + 4) continue;
+    tft.drawString(lines[i], sw / 2, rowY);
+  }
+
+  prevInfoCount = count;
+  for (int i = 0; i < MAX_ACTIVE_PRINTERS; i++) {
+    if (i < count) strlcpy(prevInfoLines[i], lines[i], sizeof(prevInfoLines[i]));
+    else prevInfoLines[i][0] = '\0';
+  }
 }
 
 void drawClock() {
@@ -180,6 +250,15 @@ void drawClock() {
       tft.drawChar(':', cx, timeYTop, 7);
     }
     prevColon = colonOn;
+  }
+
+  // --- Printer info footer (name + LAN IP) ---
+  // Evaluated every tick (cheap; only repaints on change) so it appears as soon
+  // as the printer's IP arrives via pushall, not just on the next minute roll.
+  {
+    const int clockBottom = timeYTop + digitH +
+                            (dispSettings.hideClockDate ? 0 : (DATE_GAP + DATE_FONT_H));
+    drawClockInfo(sw, sh, clockBottom, bg, dateClr);
   }
 
   // --- Only update digits/date when minute changes ---

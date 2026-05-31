@@ -925,6 +925,43 @@ static void parseMqttPayload(byte* payload, unsigned int length, BambuState& s, 
   else if (print["wifi_signal"].is<int>())
     s.wifiSignal = print["wifi_signal"].as<int>();
 
+  // Printer LAN IP: print.net.info[].ip is a little-endian uint32 (byte0 = first
+  // octet). Present in the full pushall payload for both LAN and Cloud printers
+  // (the initial pushall is requested in both modes), so this is the only way to
+  // learn a cloud-connected printer's local IP (config.ip is LAN-mode only).
+  // info[0] is the active interface; info[1] is the unused one (ip=0). Parsed via
+  // memmem because the ArduinoJson filter strips it (same pattern as airduct/ctc).
+  {
+    const char* netPos = (const char*)memmem(payload, length, "\"net\":", 6);
+    if (netPos) {
+      const char* objStart = netPos + 6;
+      while (objStart < payloadEnd && (*objStart == ' ' || *objStart == '\t')) objStart++;
+      if (objStart < payloadEnd && *objStart == '{') {
+        int depth = 0;
+        const char* end = objStart;
+        while (end < payloadEnd) {
+          if (*end == '{') depth++;
+          else if (*end == '}') { depth--; if (depth == 0) { end++; break; } }
+          end++;
+        }
+        if (depth == 0) {
+          JsonDocument netDoc;
+          if (!deserializeJson(netDoc, objStart, (size_t)(end - objStart))) {
+            for (JsonObject iface : netDoc["info"].as<JsonArray>()) {
+              if (!iface["ip"].is<unsigned int>()) continue;
+              uint32_t raw = iface["ip"].as<unsigned int>();
+              if (raw == 0) continue;
+              snprintf(s.localIp, sizeof(s.localIp), "%u.%u.%u.%u",
+                       (unsigned)(raw & 0xFF), (unsigned)((raw >> 8) & 0xFF),
+                       (unsigned)((raw >> 16) & 0xFF), (unsigned)((raw >> 24) & 0xFF));
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
   if (print["spd_lvl"].is<int>())
     s.speedLevel = print["spd_lvl"].as<int>();
 

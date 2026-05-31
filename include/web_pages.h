@@ -1183,6 +1183,14 @@ html[data-theme="dark"] .topbar::after { opacity: 0.5; }
 
 %EXTENDED_MODES_CARD%
 
+  <div class="card">
+    <div class="card-head"><div><h3>Clock screen info</h3><p>Show each configured printer's name and LAN IP in a small footer on the idle/clock screen. Handy when you run several units side by side.</p></div></div>
+    <label class="check-row">
+      <input type="checkbox" id="clkinfo" value="1" %CLK_INFO% onchange="toggleSetting('clkinfo',this.checked)">
+      <label for="clkinfo">Show printer name &amp; IP on clock screen</label>
+    </label>
+  </div>
+
   <div class="card" style="border-color:rgba(220, 69, 56, 0.30)">
     <div class="card-head"><div><h3 style="color:var(--danger)">Danger zone</h3><p>Destructive operations and experimental settings. Unlock to reveal.</p></div></div>
     <label class="check-row">
