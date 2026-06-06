@@ -149,6 +149,7 @@ void defaultDisplaySettings(DisplaySettings& ds) {
   ds.clockTimeSize = 0;        // Auto
   ds.hideClockDate = false;
   ds.showClockInfo = false;
+  ds.amsTrayTypes = true;       // default ON: preserves existing per-tray labels
   ds.showBatteryIndicator = true;
 
   // Progress: green arc, green label, white value
@@ -331,6 +332,7 @@ void loadSettings() {
   }
   dispSettings.hideClockDate = prefs.getBool("dsp_clkhd", def.hideClockDate);
   dispSettings.showClockInfo = prefs.getBool("dsp_clkif", def.showClockInfo);
+  dispSettings.amsTrayTypes = prefs.getBool("dsp_amst", def.amsTrayTypes);
   dispSettings.showBatteryIndicator = prefs.getBool("dsp_bat", def.showBatteryIndicator);
 
   loadGaugeColors("gc_prg", dispSettings.progress, def.progress);
@@ -569,6 +571,7 @@ void saveSettings() {
   prefs.putUChar("dsp_clkts", dispSettings.clockTimeSize);
   prefs.putBool("dsp_clkhd", dispSettings.hideClockDate);
   prefs.putBool("dsp_clkif", dispSettings.showClockInfo);
+  prefs.putBool("dsp_amst", dispSettings.amsTrayTypes);
   prefs.putBool("dsp_bat", dispSettings.showBatteryIndicator);
 
   saveGaugeColors("gc_prg", dispSettings.progress);

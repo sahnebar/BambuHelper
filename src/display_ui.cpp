@@ -2591,9 +2591,23 @@ static void drawAmsZone(const BambuState& s, bool force) {
     }
 
   } else if (enhanced) {
-    // Portrait enhanced layout: wider tray bars + filament-type labels
-    drawAmsStrip(s.ams, LY_AMS_Y, LY_AMS_H, LY_AMS_BAR_H,
-                 LY_AMS_BAR_MAX_W_EXTRAS, /*showFilamentTypes=*/true);
+    // Portrait enhanced layout: wider tray bars + filament-type labels.
+    if (dispSettings.amsTrayTypes) {
+      drawAmsStrip(s.ams, LY_AMS_Y, LY_AMS_H, LY_AMS_BAR_H,
+                   LY_AMS_BAR_MAX_W_EXTRAS, /*showFilamentTypes=*/true);
+    } else {
+      // Labels off (user choice): reclaim the type-row height by growing the
+      // bars to fill the zone, leaving room only for the AMS caption beneath.
+      // Caption height is read from the active label font so this adapts across
+      // layouts (240x320 / 320x480) and the smallLabels toggle. drawAmsStrip's
+      // non-types path centers these taller bars and drops the caption below.
+      setFont(tft, dispSettings.smallLabels ? FONT_SMALL : FONT_BODY);
+      int16_t capH = tft.fontHeight();
+      int16_t tallBarH = LY_AMS_H - LY_AMS_LABEL_OFFY - capH - 2;
+      if (tallBarH < LY_AMS_BAR_H) tallBarH = LY_AMS_BAR_H;  // never shrink below default
+      drawAmsStrip(s.ams, LY_AMS_Y, LY_AMS_H, tallBarH,
+                   LY_AMS_BAR_MAX_W_EXTRAS, /*showFilamentTypes=*/false);
+    }
   } else {
     drawAmsStrip(s.ams, LY_AMS_Y, LY_AMS_H, LY_AMS_BAR_H);
   }
