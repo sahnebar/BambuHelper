@@ -837,10 +837,7 @@ html[data-theme="dark"] .topbar::after { opacity: 0.5; }
       <input type="checkbox" id="fanmp" value="1" %FMP% onchange="toggleSetting('fanmp',this.checked)">
       <label for="fanmp">Match printer fan % (10% steps - applies on next printer update)</label>
     </label>
-    <label class="check-row">
-      <input type="checkbox" id="amst" value="1" %AMST% onchange="toggleSetting('amst',this.checked)">
-      <label for="amst">Show filament type under AMS bars</label>
-    </label>
+%AMST_ROW%
 %INVCOL_ROW%
 %CYD_PANEL_ROW%
   </div>
