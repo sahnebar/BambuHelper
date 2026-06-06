@@ -1258,6 +1258,15 @@ html[data-theme="dark"] .topbar::after { opacity: 0.5; }
       <input type="checkbox" id="showip" value="1" %SHOWIP%>
       <label for="showip">Show IP on startup (1.5 s)</label>
     </label>
+    <label class="check-row">
+      <input type="checkbox" id="mdns_en" value="1" %MDNS_EN%>
+      <label for="mdns_en">Enable .local name (mDNS)</label>
+    </label>
+    <div class="field">
+      <label for="mdns_host">Hostname</label>
+      <input type="text" id="mdns_host" class="mono" value="%MDNS_HOST%" placeholder="bambuhelper" maxlength="31">
+      <div class="hint">Reach the device at <span class="mono">name.local</span> in a browser.</div>
+    </div>
     <dl class="kv" id="wifiInfo" style="margin-top:var(--sp-3)">
       <dt>Signal</dt><dd id="wifiRssi">-</dd>
       <dt>Uptime</dt><dd id="wifiUptime">-</dd>
@@ -1846,6 +1855,12 @@ function saveWifi(){
   p.append('net_dns', dns);
   p.append('has_showip', '1');
   if (document.getElementById('showip').checked) p.append('showip', '1');
+  var host = document.getElementById('mdns_host').value.trim().toLowerCase()
+               .replace(/[^a-z0-9-]/g,'').replace(/^-+|-+$/g,'');
+  if (!host) host = 'bambuhelper';
+  p.append('has_mdns', '1');
+  p.append('mdns_host', host);
+  if (document.getElementById('mdns_en').checked) p.append('mdns_en', '1');
   fetch('/save/wifi',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:p.toString()})
     .then(readJsonResponse)
     .then(function(d){

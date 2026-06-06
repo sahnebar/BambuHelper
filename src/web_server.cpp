@@ -268,6 +268,14 @@ static void handleSaveWifi() {
   if (server.hasArg("has_showip"))  // full page sends this; AP page doesn't
     netSettings.showIPAtStartup = server.hasArg("showip");
 
+  if (server.hasArg("has_mdns")) {
+    netSettings.mdnsEnabled = server.hasArg("mdns_en");
+    // Don't trust the client - sanitize server-side too.
+    if (server.hasArg("mdns_host"))
+      sanitizeHostname(server.arg("mdns_host").c_str(), netSettings.hostname,
+                       sizeof(netSettings.hostname));
+  }
+
   saveSettings();
 
   server.send(200, "application/json", "{\"status\":\"ok\"}");
@@ -928,6 +936,8 @@ static void handleSettingsExport() {
   net["timezoneStr"] = netSettings.timezoneStr;
   net["use24h"] = netSettings.use24h;
   net["dateFormat"] = netSettings.dateFormat;
+  net["mdnsEnabled"] = netSettings.mdnsEnabled;
+  net["hostname"] = netSettings.hostname;
 
   // Rotation
   JsonObject rot = doc["rotation"].to<JsonObject>();
@@ -1189,6 +1199,8 @@ static void handleSettingsImportFinish() {
     }
     if (net["use24h"].is<bool>())             netSettings.use24h = net["use24h"].as<bool>();
     if (net["dateFormat"].is<uint8_t>())     netSettings.dateFormat = net["dateFormat"].as<uint8_t>();
+    if (net["mdnsEnabled"].is<bool>())        netSettings.mdnsEnabled = net["mdnsEnabled"].as<bool>();
+    if (net["hostname"].is<const char*>())    sanitizeHostname(net["hostname"], netSettings.hostname, sizeof(netSettings.hostname));
   }
 
   // Rotation

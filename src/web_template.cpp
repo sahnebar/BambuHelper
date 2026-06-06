@@ -96,6 +96,8 @@ static bool resolvePlaceholder(const char* name, String& out) {
   if (strcmp(name, "NET_SN") == 0)     { out = netSettings.subnet; return true; }
   if (strcmp(name, "NET_DNS") == 0)    { out = netSettings.dns; return true; }
   if (strcmp(name, "SHOWIP") == 0)     { out = netSettings.showIPAtStartup ? "checked" : ""; return true; }
+  if (strcmp(name, "MDNS_EN") == 0)    { out = netSettings.mdnsEnabled ? "checked" : ""; return true; }
+  if (strcmp(name, "MDNS_HOST") == 0)  { out = netSettings.hostname; return true; }
 
   // --- Clock ---
   if (strcmp(name, "USE24H") == 0)     { out = netSettings.use24h ? "checked" : ""; return true; }
