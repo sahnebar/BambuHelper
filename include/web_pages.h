@@ -828,6 +828,11 @@ html[data-theme="dark"] .topbar::after { opacity: 0.5; }
         <option value="3" %ROT3%>270&deg;</option>
       </select>
     </div>
+    <div class="field" style="margin-top:var(--sp-2)">
+      <label for="camurl">Kamera Stream URL</label>
+      <input type="text" id="camurl" value="%CAMURL%" placeholder="http://192.168.1.109:1984/api/frame.jpeg?src=Bambulab">
+      <div class="hint">Die unverschluesselte JPEG-Einzelbild-URL Ihres go2rtc- oder MJPEG-Servers.</div>
+    </div>
     <label class="check-row">
       <input type="checkbox" id="abar" value="1" %ABAR% onchange="toggleSetting('abar',this.checked)">
       <label for="abar">Animated progress bar (shimmer effect)</label>
@@ -2192,6 +2197,7 @@ function applyDisplay(){
   p.append('nbright', document.getElementById('nbright').value);
   p.append('ssbright', document.getElementById('ssbright').value);
   p.append('rotation', document.getElementById('rotation').value);
+  p.append('camurl', document.getElementById('camurl').value);
   var ap = document.getElementById('afterprint').value;
   if (ap === 'keepon') { p.append('keepon', '1'); p.append('fmins', '0'); }
   else if (ap === 'custom') { p.append('fmins', document.getElementById('fmins').value); p.append('clock', '1'); }

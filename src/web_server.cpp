@@ -86,6 +86,9 @@ static void readDisplayFromForm() {
     if (s >= 0 && s <= 3) dispSettings.clockTimeSize = (uint8_t)s;
   }
   dispSettings.hideClockDate = server.hasArg("clk_hidedate");
+  if (server.hasArg("camurl")) {
+    strlcpy(dispSettings.camUrl, server.arg("camurl").c_str(), sizeof(dispSettings.camUrl));
+  }
 
   readGaugeColorsFromForm("prg", dispSettings.progress);
   readGaugeColorsFromForm("noz", dispSettings.nozzle);
@@ -446,6 +449,14 @@ static void handleDebug() {
   doc["heap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
   doc["rssi"] = WiFi.RSSI();
+#if defined(BOARD_IS_JC3248W535)
+  String btnStates = "";
+  static const uint8_t jcButtonPins[] = { 0, 14, 15, 16, 17, 18 };
+  for (uint8_t pin : jcButtonPins) {
+    btnStates += "GPIO" + String(pin) + ":" + (digitalRead(pin) == LOW ? "LOW" : "HIGH") + " ";
+  }
+  doc["button_debug"] = btnStates;
+#endif
   doc["debug_log"] = mqttDebugLog;
 
   String json;
@@ -938,6 +949,7 @@ static void handleSettingsExport() {
   disp["showTimeRemaining"] = dispSettings.showTimeRemaining;
   disp["fanMatchPrinter"] = dispSettings.fanMatchPrinter;
   disp["showBatteryIndicator"] = dispSettings.showBatteryIndicator;
+  disp["camUrl"] = dispSettings.camUrl;
 
   JsonObject gauges = disp["gauges"].to<JsonObject>();
   JsonObject gPrg = gauges["progress"].to<JsonObject>(); gaugeColorsToJson(gPrg, dispSettings.progress);
@@ -1186,6 +1198,9 @@ static void handleSettingsImportFinish() {
     if (disp["showTimeRemaining"].is<bool>())   dispSettings.showTimeRemaining = disp["showTimeRemaining"].as<bool>();
     if (disp["fanMatchPrinter"].is<bool>())     dispSettings.fanMatchPrinter = disp["fanMatchPrinter"].as<bool>();
     if (disp["showBatteryIndicator"].is<bool>()) dispSettings.showBatteryIndicator = disp["showBatteryIndicator"].as<bool>();
+    if (disp["camUrl"].is<const char*>()) {
+      strlcpy(dispSettings.camUrl, disp["camUrl"].as<const char*>(), sizeof(dispSettings.camUrl));
+    }
     // Legacy disp["amsView"] is consumed in the printers block above as a fallback
     // for slots that don't have their own per-printer value.
 

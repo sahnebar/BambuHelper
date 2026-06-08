@@ -169,6 +169,7 @@ void defaultDisplaySettings(DisplaySettings& ds) {
   ds.showClockInfo = false;
   ds.amsTrayTypes = true;       // default ON: preserves existing per-tray labels
   ds.showBatteryIndicator = true;
+  strlcpy(ds.camUrl, "http://192.168.1.109:1984/api/frame.jpeg?src=Bambulab", sizeof(ds.camUrl));
 
   // Progress: green arc, green label, white value
   ds.progress = { CLR_GREEN, CLR_GREEN, CLR_TEXT };
@@ -352,6 +353,11 @@ void loadSettings() {
   dispSettings.showClockInfo = prefs.getBool("dsp_clkif", def.showClockInfo);
   dispSettings.amsTrayTypes = prefs.getBool("dsp_amst", def.amsTrayTypes);
   dispSettings.showBatteryIndicator = prefs.getBool("dsp_bat", def.showBatteryIndicator);
+  if (prefs.isKey("dsp_camurl")) {
+    prefs.getString("dsp_camurl", dispSettings.camUrl, sizeof(dispSettings.camUrl));
+  } else {
+    strlcpy(dispSettings.camUrl, def.camUrl, sizeof(dispSettings.camUrl));
+  }
 
   loadGaugeColors("gc_prg", dispSettings.progress, def.progress);
   loadGaugeColors("gc_noz", dispSettings.nozzle, def.nozzle);
@@ -596,6 +602,7 @@ void saveSettings() {
   prefs.putBool("dsp_clkif", dispSettings.showClockInfo);
   prefs.putBool("dsp_amst", dispSettings.amsTrayTypes);
   prefs.putBool("dsp_bat", dispSettings.showBatteryIndicator);
+  prefs.putString("dsp_camurl", dispSettings.camUrl);
 
   saveGaugeColors("gc_prg", dispSettings.progress);
   saveGaugeColors("gc_noz", dispSettings.nozzle);

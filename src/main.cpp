@@ -24,10 +24,13 @@ static bool finishDismissedByWake = false;  // true once user taps to wake while
 static unsigned long connectingScreenStart = 0;  // for stuck-state timeout
 static PrinterGcodeState prevGcodeStateId[MAX_ACTIVE_PRINTERS] = { GCODE_UNKNOWN };
 static bool prevGcodeStateSeen[MAX_ACTIVE_PRINTERS] = { false };
-#if defined(BAT_EN) && defined(BOARD_BTN_1) && defined(BOARD_BTN_3)
+#if (defined(BAT_EN) && defined(BOARD_BTN_1) && defined(BOARD_BTN_3)) || defined(BOARD_IS_JC3248W535)
 static unsigned long boardShutdownHoldStart = 0;
 #endif
-#if defined(BOARD_BTN_1)
+#if defined(BOARD_IS_JC3248W535)
+static bool jcPinWasHigh[6] = { false };
+#endif
+#if defined(BOARD_BTN_1) || defined(BOARD_IS_JC3248W535)
 static bool lastBoardBtn = false;
 static bool boardBtnStable = false;
 static unsigned long boardBtnChangeMs = 0;
@@ -72,6 +75,45 @@ static bool anyPrinterDrying() {
 
 static bool isSleepStickyScreen(ScreenState state) {
   return state == SCREEN_CLOCK || state == SCREEN_OFF;
+}
+
+static bool isUserInteractionScreen(ScreenState state) {
+  return state == SCREEN_MENU || state == SCREEN_CAMERA;
+}
+
+static void executeMenuAction() {
+  if (menuSelection == 0) { // Ausschalten
+    Serial.println("Power off requested by menu selection (deep sleep)");
+    buzzerPlay(BUZZ_ERROR);
+    setBacklight(0);
+    delay(50);
+
+    // Wait for touch/buttons to be released
+    while (isButtonHeld()) {
+      wasButtonPressed();
+      delay(10);
+    }
+#if defined(BOARD_IS_JC3248W535)
+    static const uint8_t jcButtonPins[] = { 0, 14, 15, 16, 17, 18 };
+    for (uint8_t pin : jcButtonPins) {
+      while (digitalRead(pin) == LOW) {
+        delay(10);
+      }
+    }
+#endif
+
+    // Setup wake up on GPIO 0
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 0 = low
+    esp_deep_sleep_start();
+  }
+  else if (menuSelection == 1) { // Drucker Kamera
+    setScreenState(SCREEN_CAMERA);
+    forceDisplayUpdate();
+  }
+  else if (menuSelection == 2) { // Zurueck
+    setScreenState(SCREEN_IDLE);
+    forceDisplayUpdate();
+  }
 }
 
 static void transitionToClockOrOff() {
@@ -124,7 +166,34 @@ static void cycleDisplayedPrinterFromButton() {
 }
 
 static bool wasBoardButtonPressed() {
-#if defined(BOARD_BTN_1)
+#if defined(BOARD_IS_JC3248W535)
+  bool raw = false;
+  static const uint8_t jcButtonPins[] = { 0, 14, 15, 16, 17, 18 };
+  for (uint8_t i = 0; i < 6; i++) {
+    uint8_t pin = jcButtonPins[i];
+    bool pinState = (digitalRead(pin) == LOW);
+    if (!pinState) {
+      jcPinWasHigh[i] = true;
+    }
+    if (pinState && jcPinWasHigh[i]) {
+      raw = true;
+    }
+  }
+  if (raw != lastBoardBtn) {
+    boardBtnChangeMs = millis();
+    lastBoardBtn = raw;
+  }
+  if ((millis() - boardBtnChangeMs) < 50) return false;
+  bool result = false;
+  if (raw && !boardBtnStable) {
+    result = true;
+    boardBtnPressStartMs = millis();
+  } else if (!raw && boardBtnStable) {
+    boardBtnPressStartMs = 0;
+  }
+  boardBtnStable = raw;
+  return result;
+#elif defined(BOARD_BTN_1)
   bool raw = (digitalRead(BOARD_BTN_1) == LOW);
   if (raw != lastBoardBtn) {
     boardBtnChangeMs = millis();
@@ -146,7 +215,7 @@ static bool wasBoardButtonPressed() {
 }
 
 static bool isBoardButtonHeld() {
-#if defined(BOARD_BTN_1)
+#if defined(BOARD_IS_JC3248W535) || defined(BOARD_BTN_1)
   return boardBtnStable;
 #else
   return false;
@@ -154,7 +223,7 @@ static bool isBoardButtonHeld() {
 }
 
 static uint32_t boardButtonHoldDurationMs() {
-#if defined(BOARD_BTN_1)
+#if defined(BOARD_IS_JC3248W535) || defined(BOARD_BTN_1)
   if (!boardBtnStable || boardBtnPressStartMs == 0) return 0;
   return (uint32_t)(millis() - boardBtnPressStartMs);
 #else
@@ -195,6 +264,40 @@ static void doTapActions() {
     return;
   }
 
+  if (cur == SCREEN_MENU) {
+    int16_t tx = -1, ty = -1;
+    if (getTouchPoint(tx, ty)) {
+      int action = checkMenuTap(tx, ty);
+      if (action == 1) { // OK
+        executeMenuAction();
+      } else if (action == 2) { // Up
+        menuSelection = (menuSelection - 1 + 3) % 3;
+        forceDisplayUpdate();
+      } else if (action == 3) { // Down
+        menuSelection = (menuSelection + 1) % 3;
+        forceDisplayUpdate();
+      }
+    } else {
+      // Fallback for physical buttons: cycle selection down
+      menuSelection = (menuSelection + 1) % 3;
+      forceDisplayUpdate();
+    }
+    return;
+  }
+
+  if (cur == SCREEN_CAMERA) {
+    setScreenState(SCREEN_MENU);
+    forceDisplayUpdate();
+    return;
+  }
+
+  if (cur == SCREEN_IDLE || cur == SCREEN_PRINTING || cur == SCREEN_FINISHED) {
+    menuSelection = 0;
+    setScreenState(SCREEN_MENU);
+    forceDisplayUpdate();
+    return;
+  }
+
   if (getActiveConnCount() >= 2) {
     cycleDisplayedPrinterFromButton();
     return;
@@ -217,6 +320,15 @@ static void handleWakeButton() {
   uint32_t boardHoldMs = boardButtonHoldDurationMs();
   uint32_t holdMs = (touchHoldMs > boardHoldMs) ? touchHoldMs : boardHoldMs;
   bool suppressDim = isBoardButton3Held();
+
+  ScreenState cur = getScreenState();
+  if (isUserInteractionScreen(cur)) {
+    if (touchPress || boardPress) {
+      ledOnUserInteraction();
+      doTapActions();
+    }
+    return; // Skip standard tap/hold/dimmer handling while in menu
+  }
 
   // Tick the dimmer every loop regardless of state - it owns the 2 s save debounce.
   bool holdConsumed = ledHoldDimUpdate(held, holdMs, suppressDim);
@@ -281,6 +393,75 @@ static void handleBoardPowerOff() {
   gpio_hold_en((gpio_num_t)BAT_EN);
   esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
   delay(200);
+  esp_deep_sleep_start();
+#elif defined(BOARD_IS_JC3248W535)
+  if (isUserInteractionScreen(getScreenState())) {
+    boardShutdownHoldStart = 0;
+    return;
+  }
+  bool pressed = false;
+  static const uint8_t jcButtonPins[] = { 0, 14, 15, 16, 17, 18 };
+  uint8_t pressedPin = 0xFF;
+  for (uint8_t i = 0; i < 6; i++) {
+    uint8_t pin = jcButtonPins[i];
+    bool pinState = (digitalRead(pin) == LOW);
+    if (!pinState) {
+      jcPinWasHigh[i] = true;
+    }
+    if (pinState && jcPinWasHigh[i]) {
+      pressed = true;
+      pressedPin = pin;
+    }
+  }
+
+  bool touchHeld = isButtonHeld();
+  uint32_t touchHoldMs = buttonHoldDurationMs();
+
+  if (!pressed && !touchHeld) {
+    boardShutdownHoldStart = 0;
+    return;
+  }
+
+  if (boardShutdownHoldStart == 0) {
+    boardShutdownHoldStart = millis();
+    return;
+  }
+
+  uint32_t currentHoldDuration = 0;
+  if (touchHeld) {
+    currentHoldDuration = touchHoldMs;
+  } else {
+    currentHoldDuration = millis() - boardShutdownHoldStart;
+  }
+
+  if (currentHoldDuration < 3000) return;
+
+  if (touchHeld) {
+    Serial.println("Power off requested by touchscreen hold (deep sleep)");
+  } else {
+    Serial.printf("Power off requested by button on GPIO %d (deep sleep)\n", pressedPin);
+  }
+
+  buzzerPlay(BUZZ_ERROR);
+  setBacklight(0);
+  delay(50);
+
+  if (touchHeld) {
+    while (isButtonHeld()) {
+      wasButtonPressed();
+      delay(10);
+    }
+  } else {
+    while (digitalRead(pressedPin) == LOW) {
+      delay(10);
+    }
+  }
+
+  if (touchHeld) {
+    esp_sleep_enable_ext0_wakeup(GPIO_NUM_0, 0); // 0 = low
+  } else {
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)pressedPin, 0); // 0 = low
+  }
   esp_deep_sleep_start();
 #endif
 }
@@ -378,6 +559,10 @@ static void handleDisplayedPrinterConnectedState(ScreenState current, BambuState
 static void updateDisplayedPrinterScreenState() {
   ScreenState current = getScreenState();
 
+  if (isUserInteractionScreen(current)) {
+    return;
+  }
+
   // Default activity for early-return paths (no printer / OTA / disconnected).
   // handleDisplayedPrinterConnectedState() overrides for live-state branches.
   ledSetActivity(LED_ACT_IDLE);
@@ -473,7 +658,7 @@ static void handleDisplaySleepTimeouts() {
     }
   }
 
-  if ((cur == SCREEN_IDLE || cur == SCREEN_CONNECTING_MQTT ||
+  if ((cur == SCREEN_IDLE || cur == SCREEN_CONNECTING_MQTT || cur == SCREEN_MENU ||
        (cur == SCREEN_PRINTING && dpSettings.keepPrintScreen)) &&
       !dpSettings.keepDisplayOn && dpSettings.finishDisplayMins > 0) {
     // Don't sleep while AMS is drying - the drying screen is useful
@@ -488,7 +673,7 @@ static void handleDisplaySleepTimeouts() {
     } else {
       idleClockActive = false;
     }
-  } else if (cur != SCREEN_IDLE && cur != SCREEN_CONNECTING_MQTT) {
+  } else if (cur != SCREEN_IDLE && cur != SCREEN_CONNECTING_MQTT && cur != SCREEN_MENU) {
     idleClockActive = false;
   }
 }
@@ -706,14 +891,21 @@ void setup() {
   pinMode(BAT_EN, OUTPUT);
   digitalWrite(BAT_EN, HIGH);
 #endif
-#if defined(BOARD_BTN_1)
-  pinMode(BOARD_BTN_1, INPUT_PULLUP);
-#endif
-#if defined(BOARD_BTN_2)
-  pinMode(BOARD_BTN_2, INPUT_PULLUP);
-#endif
-#if defined(BOARD_BTN_3)
-  pinMode(BOARD_BTN_3, INPUT_PULLUP);
+#if defined(BOARD_IS_JC3248W535)
+  static const uint8_t jcButtonPins[] = { 0, 14, 15, 16, 17, 18 };
+  for (uint8_t pin : jcButtonPins) {
+    pinMode(pin, INPUT_PULLUP);
+  }
+#else
+  #if defined(BOARD_BTN_1)
+    pinMode(BOARD_BTN_1, INPUT_PULLUP);
+  #endif
+  #if defined(BOARD_BTN_2)
+    pinMode(BOARD_BTN_2, INPUT_PULLUP);
+  #endif
+  #if defined(BOARD_BTN_3)
+    pinMode(BOARD_BTN_3, INPUT_PULLUP);
+  #endif
 #endif
   Serial.begin(115200);
   Serial.printf("\n=== BambuHelper %s Starting ===\n", FW_VERSION);

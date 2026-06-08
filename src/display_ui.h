@@ -18,8 +18,12 @@ enum ScreenState {
   SCREEN_FINISHED,
   SCREEN_CLOCK,
   SCREEN_OFF,
-  SCREEN_OTA_UPDATE
+  SCREEN_OTA_UPDATE,
+  SCREEN_MENU,
+  SCREEN_CAMERA
 };
+
+extern int menuSelection;
 
 extern lgfx::LovyanGFX* tft_ptr;
 // Macro (NOT a reference) so callers' `tft.method()` always dereferences the
@@ -56,5 +60,7 @@ void applyDisplaySettings();  // re-apply rotation, bg, force redraw
 void triggerDisplayTransition(); // start printer-name overlay on rotation
 void checkNightMode();        // apply scheduled brightness dimming
 uint8_t getEffectiveBrightness(); // current brightness (night or normal)
+void forceDisplayUpdate();
+int checkMenuTap(int16_t x, int16_t y);
 
 #endif // DISPLAY_UI_H

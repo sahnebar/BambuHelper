@@ -476,6 +476,16 @@ Perform an antenna mod by soldering two individual goldpins to the antenna pads,
 - Check rotation mode in the web interface (Multi-Printer section). Smart mode only switches automatically when a printer is actively printing.
 - Press the physical button (if configured) to manually cycle between printers.
 
+## Touchscreen Navigation & Camera Settings (Guition JC3248W535)
+
+This fork contains custom features designed for the **Guition JC3248W535** board:
+* **Configurable Camera Stream URL**: Set your custom camera stream URL directly in the **Display** section of the Web Interface.
+* **On-Screen Touch Controls**: The touchscreen menu navigation has on-screen controls:
+  * **Left-Top**: Renders an **OK** button to confirm/select the current menu item.
+  * **Left-Bottom**: Renders **Up (`^`)** and **Down (`v`)** buttons to navigate through items on the right side of the screen.
+  * **Touch & Hold** interaction has been completely removed in favor of instant touch/click responsiveness.
+* **Simplified Menu**: Unused options like "Livestream Info" have been removed.
+
 ## License
 
 MIT

@@ -1,6 +1,7 @@
 #include "button.h"
 #include "settings.h"
 #include "buzzer.h"
+#include "display_ui.h"
 
 #if defined(USE_XPT2046)
   #include <SPI.h>
@@ -441,4 +442,80 @@ bool isButtonHeld() {
 uint32_t buttonHoldDurationMs() {
   if (!stableState || pressStartMs == 0) return 0;
   return (uint32_t)(millis() - pressStartMs);
+}
+
+bool getTouchCoordinates(int16_t &x, int16_t &y) {
+#if defined(USE_AXS_TOUCH)
+  if (!axsTouchBusReady) return false;
+  uint8_t cmd[8] = {0xB5, 0xAB, 0xA5, 0x5A, 0, 0, 0, 8};
+  Wire.beginTransmission(AXS_TOUCH_ADDR);
+  Wire.write(cmd, 8);
+  if (Wire.endTransmission() != 0) return false;
+
+  delayMicroseconds(50); // slight delay for controller
+
+  if (Wire.requestFrom((uint8_t)AXS_TOUCH_ADDR, (uint8_t)8) == 8) {
+    uint8_t rx[8];
+    for (int i = 0; i < 8; i++) {
+      rx[i] = Wire.read();
+    }
+    uint8_t fingerCount = rx[1];
+    if (fingerCount > 0) {
+      x = ((int16_t)(rx[2] & 0x0F) << 8) | rx[3];
+      y = ((int16_t)(rx[4] & 0x0F) << 8) | rx[5];
+      return true;
+    }
+  }
+  return false;
+#elif defined(USE_XPT2046)
+  if (!touchReady) return false;
+  if (ts.touched()) {
+    uint16_t tx, ty;
+    ts.getPosition(tx, ty);
+    x = (int16_t)tx;
+    y = (int16_t)ty;
+    return true;
+  }
+  return false;
+#elif defined(TOUCH_CS)
+  uint16_t tx, ty;
+  if (tft.getTouch(&tx, &ty)) {
+    x = (int16_t)tx;
+    y = (int16_t)ty;
+    return true;
+  }
+  return false;
+#else
+  return false;
+#endif
+}
+
+bool getTouchPoint(int16_t &x, int16_t &y) {
+  int16_t rx = -1, ry = -1;
+  if (!getTouchCoordinates(rx, ry)) return false;
+
+#if defined(USE_AXS_TOUCH)
+  // Map raw 320x480 coordinates to rotated display coordinates
+  uint8_t rot = tft.getRotation();
+  if (rot == 0) {
+    x = rx;
+    y = ry;
+  } else if (rot == 1) {
+    x = ry;
+    y = 320 - rx;
+  } else if (rot == 2) {
+    x = 320 - rx;
+    y = 480 - ry;
+  } else if (rot == 3) {
+    x = 480 - ry;
+    y = rx;
+  }
+#else
+  // For other boards, getTouchCoordinates already returns rotated coordinates
+  x = rx;
+  y = ry;
+#endif
+
+  Serial.printf("[TOUCH] Mapped Coords: X=%d, Y=%d (rot=%d)\n", x, y, tft.getRotation());
+  return true;
 }

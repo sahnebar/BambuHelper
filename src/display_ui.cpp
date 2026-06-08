@@ -18,6 +18,7 @@
 #include <Wire.h>     // PCA9535PW I2C IO expander
 #endif
 #include <new>   // placement new for CYD panel variant selection
+#include <HTTPClient.h>
 
 // =============================================================================
 //  LovyanGFX board-specific configurations
@@ -607,6 +608,7 @@ static uint8_t sanitizeRotation(uint8_t r) {
 
 static ScreenState currentScreen = SCREEN_SPLASH;
 static ScreenState prevScreen = SCREEN_SPLASH;
+int menuSelection = 0;
 static bool forceRedraw = true;
 static unsigned long lastDisplayUpdate = 0;
 
@@ -3835,6 +3837,208 @@ void checkNightMode() {
   }
 }
 
+void forceDisplayUpdate() {
+  lastDisplayUpdate = 0;
+}
+
+static void drawMenu() {
+  markFrameDirty();
+  const int16_t sw = uiW();
+  const int16_t sh = uiH();
+  const int16_t cx = sw / 2;
+
+  // Clear screen
+  tft.fillScreen(CLR_BG);
+
+  // Title
+  setFont(tft, FONT_LARGE);
+  tft.setTextColor(CLR_GREEN, CLR_BG);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("BambuHelper Menue", cx, sh * 0.12);
+
+  // Divider line
+  tft.drawFastHLine(20, sh * 0.18, sw - 40, CLR_TEXT_DARK);
+
+  // Left side buttons
+  int16_t leftW = 80;
+  int16_t btnW = leftW - 15;
+
+  // 1. OK Button
+  int16_t okX = 10;
+  int16_t okY = sh * 0.22;
+  int16_t okH = (sh >= 400) ? 65 : 45;
+  tft.fillRoundRect(okX, okY, btnW, okH, 8, CLR_GREEN);
+  tft.drawRoundRect(okX, okY, btnW, okH, 8, CLR_TEXT);
+  tft.setTextColor(CLR_TEXT, CLR_GREEN);
+  setFont(tft, FONT_BODY);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("OK", okX + btnW / 2, okY + okH / 2);
+
+  // 2. Up Button
+  int16_t upX = 10;
+  int16_t upY = sh * 0.55;
+  int16_t upH = (sh >= 400) ? 55 : 38;
+  tft.fillRoundRect(upX, upY, btnW, upH, 8, CLR_CARD);
+  tft.drawRoundRect(upX, upY, btnW, upH, 8, CLR_TEXT_DARK);
+  tft.setTextColor(CLR_TEXT, CLR_CARD);
+  setFont(tft, FONT_LARGE);
+  tft.drawString("^", upX + btnW / 2, upY + upH / 2 + 5);
+
+  // 3. Down Button
+  int16_t downX = 10;
+  int16_t downY = upY + upH + 15;
+  int16_t downH = (sh >= 400) ? 55 : 38;
+  tft.fillRoundRect(downX, downY, btnW, downH, 8, CLR_CARD);
+  tft.drawRoundRect(downX, downY, btnW, downH, 8, CLR_TEXT_DARK);
+  tft.setTextColor(CLR_TEXT, CLR_CARD);
+  setFont(tft, FONT_LARGE);
+  tft.drawString("v", downX + btnW / 2, downY + downH / 2 - 2);
+
+  // Right side menu items
+  int16_t cardX = leftW + 10;
+  int16_t cardW = sw - cardX - 15;
+  int16_t cardH = (sh >= 400) ? 55 : 36;
+  int16_t cardGap = (sh >= 400) ? 12 : 8;
+  int16_t cardStartY = sh * 0.22;
+
+  const char* options[] = { "Ausschalten", "Drucker Kamera", "Zurueck" };
+
+  for (int i = 0; i < 3; i++) {
+    int16_t cy_pos = cardStartY + i * (cardH + cardGap);
+    bool selected = (menuSelection == i);
+
+    // Draw card background
+    uint16_t bg_col = selected ? CLR_BLUE : CLR_CARD;
+    uint16_t fg_col = selected ? CLR_TEXT : CLR_TEXT_DIM;
+    uint16_t border_col = selected ? CLR_GREEN : CLR_TEXT_DARK;
+
+    tft.fillRoundRect(cardX, cy_pos, cardW, cardH, 8, bg_col);
+    tft.drawRoundRect(cardX, cy_pos, cardW, cardH, 8, border_col);
+
+    // Draw text inside card
+    tft.setTextColor(fg_col, bg_col);
+    setFont(tft, FONT_BODY);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString(options[i], cardX + cardW / 2, cy_pos + cardH / 2);
+  }
+
+  // Footer instructions
+  setFont(tft, FONT_SMALL);
+  tft.setTextColor(CLR_TEXT_DARK, CLR_BG);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("Links: Navigation & OK", cx, sh - 25);
+}
+
+int checkMenuTap(int16_t x, int16_t y) {
+  const int16_t sh = uiH();
+
+  int16_t leftW = 80;
+  int16_t btnW = leftW - 15;
+
+  // OK Button bounds
+  int16_t okX = 10;
+  int16_t okY = sh * 0.22;
+  int16_t okH = (sh >= 400) ? 65 : 45;
+
+  if (x >= okX && x <= (okX + btnW) && y >= okY && y <= (okY + okH)) {
+    return 1; // OK clicked
+  }
+
+  // Up Button bounds
+  int16_t upX = 10;
+  int16_t upY = sh * 0.55;
+  int16_t upH = (sh >= 400) ? 55 : 38;
+
+  if (x >= upX && x <= (upX + btnW) && y >= upY && y <= (upY + upH)) {
+    return 2; // Up clicked
+  }
+
+  // Down Button bounds
+  int16_t downX = 10;
+  int16_t downY = upY + upH + 15;
+  int16_t downH = (sh >= 400) ? 55 : 38;
+
+  if (x >= downX && x <= (downX + btnW) && y >= downY && y <= (downY + downH)) {
+    return 3; // Down clicked
+  }
+
+  return 0; // clicked outside
+}
+
+
+static unsigned long lastCameraFetch = 0;
+
+static void drawCameraFrame() {
+  unsigned long now = millis();
+  // Fetch a new frame every 1.5 seconds (1500 ms)
+  if (now - lastCameraFetch < 1500 && !forceRedraw) {
+    return;
+  }
+  lastCameraFetch = now;
+
+  markFrameDirty();
+  const int16_t sw = uiW();
+  const int16_t sh = uiH();
+  const int16_t cx = sw / 2;
+
+  // Calculate request size matching screen width in 16:9 aspect ratio
+  int16_t reqW = sw;
+  int16_t reqH = (sw * 9) / 16;
+  int16_t imgX = 0;
+  int16_t imgY = (sh - reqH) / 2;
+
+  // Let's do a non-blocking HTTP fetch of the JPEG frame pre-resized by the server
+  char url[256];
+  const char* separator = strchr(dispSettings.camUrl, '?') ? "&" : "?";
+  snprintf(url, sizeof(url), "%s%sw=%d&h=%d", dispSettings.camUrl, separator, reqW, reqH);
+
+  HTTPClient http;
+  http.setTimeout(2000); // 2 second timeout
+  http.begin(url);
+
+  int httpCode = http.GET();
+  if (httpCode == HTTP_CODE_OK) {
+    WiFiClient* stream = http.getStreamPtr();
+    if (stream) {
+      tft.fillScreen(TFT_BLACK);
+      
+      bool success = tft.drawJpg(stream, imgX, imgY, reqW, reqH, 0, 0, 1.0f);
+      if (!success) {
+        // Fallback message if decode failed
+        tft.fillScreen(CLR_BG);
+        setFont(tft, FONT_BODY);
+        tft.setTextColor(CLR_RED, CLR_BG);
+        tft.setTextDatum(MC_DATUM);
+        tft.drawString("Decode Fehler", cx, sh / 2);
+      } else {
+        // Draw a nice overlay title at the top, and back hint at the bottom
+        tft.fillRect(0, 0, sw, 30, tft.color565(0, 0, 0));
+        setFont(tft, FONT_SMALL);
+        tft.setTextColor(CLR_GREEN, TFT_BLACK);
+        tft.setTextDatum(TC_DATUM);
+        tft.drawString("Live-Kamera (Bambulab)", cx, 8);
+
+        tft.fillRect(0, sh - 30, sw, 30, tft.color565(0, 0, 0));
+        tft.setTextColor(CLR_TEXT_DIM, TFT_BLACK);
+        tft.setTextDatum(BC_DATUM);
+        tft.drawString("Tippen zum Beenden", cx, sh - 8);
+      }
+    }
+  } else {
+    // HTTP fetch failed
+    tft.fillScreen(CLR_BG);
+    setFont(tft, FONT_BODY);
+    tft.setTextColor(CLR_RED, CLR_BG);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString("Kamera Offline", cx, sh / 2 - 15);
+    setFont(tft, FONT_SMALL);
+    tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
+    tft.drawString("HTTP Code: " + String(httpCode), cx, sh / 2 + 15);
+    tft.drawString("Tippen zum Beenden", cx, sh - 25);
+  }
+  http.end();
+}
+
 // ---------------------------------------------------------------------------
 //  Main update (called from loop)
 // ---------------------------------------------------------------------------
@@ -3955,6 +4159,15 @@ void updateDisplay() {
     case SCREEN_CLOCK:
       if (!dispSettings.pongClock) drawClock();
       // Pong clock is ticked before the throttle (above)
+      break;
+
+    case SCREEN_MENU:
+      drawMenu();
+      break;
+
+
+    case SCREEN_CAMERA:
+      drawCameraFrame();
       break;
 
     case SCREEN_OFF:

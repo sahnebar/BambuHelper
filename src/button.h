@@ -14,5 +14,7 @@ void sanitizeButtonPin();  // zero buttonPin if it conflicts with a reserved
 // loop calls wasButtonPressed() once per iteration, so these stay fresh.
 bool isButtonHeld();              // post-debounce stable pressed state
 uint32_t buttonHoldDurationMs();  // 0 if not held, else millis() - press start
+bool getTouchCoordinates(int16_t &x, int16_t &y);
+bool getTouchPoint(int16_t &x, int16_t &y);
 
 #endif // BUTTON_H

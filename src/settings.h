@@ -92,6 +92,7 @@ struct DisplaySettings {
   GaugeColors exhaustFan;   // X2D exhaust fan
   GaugeColors chamberTemp;
   GaugeColors heatbreak;
+  char        camUrl[128];
 };
 
 // Network settings
