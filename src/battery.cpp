@@ -87,11 +87,13 @@ void begin() {
     s_present = true;
     s_voltageEma = v;
     s_percent = voltageToPercent(v);
+    s_charging = (v > 4.15f);
   } else {
     s_present = false;
+    s_charging = false;
   }
-  Serial.printf("[BAT] ADC pin=%d rawAvg=%u Vpin=%umV Vbat=%.3fV (divider=%.2fx) present=%d pct=%u\n",
-                BAT_ADC_PIN, rawAvg, (unsigned)mvAvg, v, (float)BAT_VOLT_DIVIDER, s_present, s_percent);
+  Serial.printf("[BAT] ADC pin=%d rawAvg=%u Vpin=%umV Vbat=%.3fV (divider=%.2fx) present=%d pct=%u charging=%d\n",
+                BAT_ADC_PIN, rawAvg, (unsigned)mvAvg, v, (float)BAT_VOLT_DIVIDER, s_present, s_percent, s_charging);
 #endif
 
 #if defined(BOARD_HAS_BAT_AXP2101)
@@ -143,8 +145,28 @@ void tick() {
   // Sanity-cap at V_MAX_PRESENT to reject noise on a floating pin.
   bool inRange = (v >= (s_present ? V_DROP_PRESENT : V_MIN_PRESENT)) && (v <= V_MAX_PRESENT);
   if (inRange) {
-    if (!s_present) { s_voltageEma = v; s_present = true; }
-    else            { s_voltageEma = s_voltageEma * 0.8f + v * 0.2f; }
+    static float s_lastRawV = 0.0f;
+    if (!s_present) {
+      s_voltageEma = v;
+      s_present = true;
+      s_charging = (v > 4.15f);
+    } else {
+      s_voltageEma = s_voltageEma * 0.8f + v * 0.2f;
+      float diff = v - s_lastRawV;
+      if (s_lastRawV > 0.1f) {
+        if (diff > 0.035f) {
+          s_charging = true;
+        } else if (diff < -0.035f) {
+          s_charging = false;
+        }
+      }
+      if (v > 4.16f) {
+        s_charging = true;
+      } else if (v < 3.4f) {
+        s_charging = false;
+      }
+    }
+    s_lastRawV = v;
     s_percent = voltageToPercent(s_voltageEma);
   } else if (s_present) {
     s_present = false;

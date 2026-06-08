@@ -2641,9 +2641,21 @@ static void drawBatteryIconOnly(int16_t x, int16_t y, uint8_t pct) {
   tft.drawRect(x, y + 2, 8, 14, outline);
 
   if (!blank) {
-    int16_t levelH = (int16_t)((12 * (uint16_t)pct + 50) / 100);
-    if (levelH > 0) {
-      tft.fillRect(x + 1, y + 3 + (12 - levelH), 6, levelH, fg);
+    if (Battery::isCharging()) {
+      // Animate battery filling up: cycle level from current pct to 100% over 1500 ms
+      uint32_t ms = millis() % 1500;
+      float ratio = (float)ms / 1500.0f;
+      uint8_t animPct = pct + (uint8_t)((100 - pct) * ratio);
+      if (animPct > 100) animPct = 100;
+      int16_t levelH = (int16_t)((12 * (uint16_t)animPct + 50) / 100);
+      if (levelH > 0) {
+        tft.fillRect(x + 1, y + 3 + (12 - levelH), 6, levelH, CLR_GREEN);
+      }
+    } else {
+      int16_t levelH = (int16_t)((12 * (uint16_t)pct + 50) / 100);
+      if (levelH > 0) {
+        tft.fillRect(x + 1, y + 3 + (12 - levelH), 6, levelH, fg);
+      }
     }
   }
 }
@@ -2662,8 +2674,13 @@ static void drawWifiSignalIndicator(const BambuState& s, int16_t wifiY = LY_WIFI
   if (shouldShowBatteryIndicator()) {
     int16_t iconY = wifiY - LY_BAT_H / 2;
     drawBatteryIconOnly(LY_WIFI_X, iconY, Battery::percent());
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%u%%", (unsigned)Battery::percent());
+    tft.fillRect(LY_WIFI_X + LY_BAT_TEXT_X, wifiY - 8, 55, 16, CLR_BG);
+    char buf[12];
+    if (Battery::isCharging()) {
+      snprintf(buf, sizeof(buf), "%u%%+", (unsigned)Battery::percent());
+    } else {
+      snprintf(buf, sizeof(buf), "%u%%", (unsigned)Battery::percent());
+    }
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
     tft.drawString(buf, LY_WIFI_X + LY_BAT_TEXT_X, wifiY);
@@ -2685,6 +2702,20 @@ static int16_t drawBatteryPrefix(int16_t y) {
   if (!shouldShowBatteryIndicator()) return 0;
   int16_t iconY = y - LY_BAT_H / 2;
   drawBatteryIconOnly(LY_WIFI_X, iconY, Battery::percent());
+
+  if (LY_BAT_SHIFT_X >= 40) {
+    tft.fillRect(LY_WIFI_X + LY_BAT_TEXT_X, y - 8, LY_BAT_SHIFT_X + 10 - (LY_WIFI_X + LY_BAT_TEXT_X) - 2, 16, CLR_BG);
+    char buf[12];
+    if (Battery::isCharging()) {
+      snprintf(buf, sizeof(buf), "%u%%+", (unsigned)Battery::percent());
+    } else {
+      snprintf(buf, sizeof(buf), "%u%%", (unsigned)Battery::percent());
+    }
+    tft.setTextDatum(ML_DATUM);
+    tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
+    tft.drawString(buf, LY_WIFI_X + LY_BAT_TEXT_X, y);
+  }
+
   return LY_BAT_SHIFT_X;
 }
 
