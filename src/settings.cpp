@@ -198,7 +198,11 @@ void defaultDisplaySettings(DisplaySettings& ds) {
   ds.showClockInfo = false;
   ds.amsTrayTypes = true;       // default ON: preserves existing per-tray labels
   ds.buttonPowerControl = false;  // #136: default OFF (opt-in per device)
-  ds.showBatteryIndicator = false;  // default OFF on all boards; enable per device
+#if defined(BOARD_HAS_BATTERY)
+  ds.showBatteryIndicator = true;   // default ON when battery hardware is enabled
+#else
+  ds.showBatteryIndicator = false;  // default OFF on boards without battery hardware
+#endif
   ds.glowMode = 0;             // edge glow off
   ds.glowColor = CLR_GREEN;
   ds.glowStyle = 0;            // Sweep
