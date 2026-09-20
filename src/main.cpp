@@ -443,7 +443,7 @@ static void doTapActions() {
     return;
   }
 
-  if (cur == SCREEN_IDLE || cur == SCREEN_PRINTING) {
+  if (cur == SCREEN_IDLE || cur == SCREEN_PRINTING || cur == SCREEN_CONNECTING_MQTT || cur == SCREEN_WIFI_CONNECTED || cur == SCREEN_FINISHED || cur == SCREEN_CLOCK) {
     setScreenState(SCREEN_MENU);
     return;
   }

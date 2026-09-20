@@ -5795,7 +5795,7 @@ static void drawStreamInfo() {
   setFont(tft, FONT_BODY);
   tft.setTextColor(CLR_TEXT, CLR_BG);
   tft.setTextDatum(MC_DATUM);
-  tft.drawString("User: bblp | Pass: ********" , cx, infoY);
+  tft.drawString("User: bblp | Pass: ********", cx, infoY);
 
   setFont(tft, FONT_SMALL);
   tft.setTextColor(CLR_TEXT_DIM, CLR_BG);

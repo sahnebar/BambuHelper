@@ -683,8 +683,13 @@ static bool resolvePlaceholder(const char* name, String& out) {
     if (dispSettings.showBatteryIndicator) out += " checked";
     out += "><label for=\"batshow\">Show battery indicator</label>";
     out += "</label>";
-    out += "<div class=\"hint\" style=\"padding-left:28px;margin-top:-4px\">Hide if your board has no battery wired (avoids phantom readings).</div>";
-    out += "</div>";
+    out += "<div class=\"card\">";
+    out += "<div class=\"card-head\"><div><h3>Printer Livestream</h3>";
+    out += "<p>Direct RTSP stream URL for VLC / Player.</p></div></div>";
+    out += "<div style=\"padding:12px 16px;\">";
+    out += "<p><strong>Stream URL:</strong> <code>rtsps://bblp:password@192.168.1.100:322/streaming/live/1</code></p>";
+    out += "<p style=\"margin-top:8px;\"><a href=\"rtsps://bblp:password@192.168.1.100:322/streaming/live/1\" target=\"_blank\" style=\"display:inline-block;padding:6px 14px;background:#007acc;color:#fff;border-radius:4px;text-decoration:none;font-weight:bold;\">Open Livestream</a></p>";
+    out += "</div></div>";
 #else
     out = "";
 #endif
