@@ -2670,8 +2670,13 @@ static void drawAmsZone(const BambuState& s, bool force) {
 //  Footprint is 8 px wide x 16 px tall: 4x2 nub on top, 8x14 body below.
 // ---------------------------------------------------------------------------
 static void drawBatteryIconOnly(int16_t x, int16_t y, uint8_t pct) {
+  if (Battery::isCharging()) {
+    uint8_t animStep = (millis() / 400) % 5;
+    pct = (animStep * 25);
+  }
   uint16_t fg;
-  if (pct < 20) fg = CLR_RED;
+  if (Battery::isCharging()) fg = CLR_GREEN;
+  else if (pct < 20) fg = CLR_RED;
   else if (pct < 50) fg = CLR_YELLOW;
   else fg = CLR_GREEN;
 
@@ -2710,10 +2715,15 @@ static void drawWifiSignalIndicator(const BambuState& s, int16_t wifiY = LY_WIFI
   if (shouldShowBatteryIndicator()) {
     int16_t iconY = wifiY - LY_BAT_H / 2;
     drawBatteryIconOnly(LY_WIFI_X, iconY, Battery::percent());
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%u%%", (unsigned)Battery::percent());
+    char buf[12];
+    if (Battery::isCharging()) {
+      snprintf(buf, sizeof(buf), "%u%%+", (unsigned)Battery::percent());
+    } else {
+      snprintf(buf, sizeof(buf), "%u%%", (unsigned)Battery::percent());
+    }
     tft.setTextDatum(ML_DATUM);
     tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
+    tft.fillRect(LY_WIFI_X + LY_BAT_TEXT_X, wifiY - 10, 55, 20, CLR_BG);
     tft.drawString(buf, LY_WIFI_X + LY_BAT_TEXT_X, wifiY);
     return;
   }
@@ -2733,6 +2743,16 @@ static int16_t drawBatteryPrefix(int16_t y) {
   if (!shouldShowBatteryIndicator()) return 0;
   int16_t iconY = y - LY_BAT_H / 2;
   drawBatteryIconOnly(LY_WIFI_X, iconY, Battery::percent());
+  char buf[12];
+  if (Battery::isCharging()) {
+    snprintf(buf, sizeof(buf), "%u%%+", (unsigned)Battery::percent());
+  } else {
+    snprintf(buf, sizeof(buf), "%u%%", (unsigned)Battery::percent());
+  }
+  tft.setTextDatum(ML_DATUM);
+  tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
+  tft.fillRect(LY_WIFI_X + LY_BAT_TEXT_X, y - 10, 55, 20, CLR_BG);
+  tft.drawString(buf, LY_WIFI_X + LY_BAT_TEXT_X, y);
   return LY_BAT_SHIFT_X;
 }
 

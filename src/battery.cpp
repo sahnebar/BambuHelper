@@ -138,13 +138,24 @@ void tick() {
   s_lastTickMs = now;
 
 #if defined(BOARD_HAS_BAT_ADC)
-  float v = readVoltageOnceADC();
-  // Hysteresis: only enter present at >= V_MIN_PRESENT, only leave at < V_DROP_PRESENT.
-  // Sanity-cap at V_MAX_PRESENT to reject noise on a floating pin.
-  bool inRange = (v >= (s_present ? V_DROP_PRESENT : V_MIN_PRESENT)) && (v <= V_MAX_PRESENT);
+  float rawV = readVoltageOnceADC();
+  static float s_prevV = 0.0f;
+  if (s_prevV > 0.0f) {
+    float diff = rawV - s_prevV;
+    if (diff > 0.035f) {
+      s_charging = true;
+    } else if (diff < -0.035f) {
+      s_charging = false;
+    }
+  }
+  s_prevV = rawV;
+  if (rawV > 4.16f) s_charging = true;
+  else if (rawV < 3.85f && s_charging && (rawV - s_voltageEma) <= 0.0f) s_charging = false;
+
+  bool inRange = (rawV >= (s_present ? V_DROP_PRESENT : V_MIN_PRESENT)) && (rawV <= V_MAX_PRESENT);
   if (inRange) {
-    if (!s_present) { s_voltageEma = v; s_present = true; }
-    else            { s_voltageEma = s_voltageEma * 0.8f + v * 0.2f; }
+    if (!s_present) { s_voltageEma = rawV; s_present = true; }
+    else            { s_voltageEma = s_voltageEma * 0.8f + rawV * 0.2f; }
     s_percent = voltageToPercent(s_voltageEma);
   } else if (s_present) {
     s_present = false;

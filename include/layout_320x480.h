@@ -120,9 +120,9 @@
 // shouldShowBatteryIndicator() returns false and these go unused. Values mirror
 // layout_default.h scaled up.
 #define LY_BAT_W       12
-#define LY_BAT_H       24
-#define LY_BAT_TEXT_X  18
-#define LY_BAT_SHIFT_X 20
+#define LY_BAT_H       16
+#define LY_BAT_TEXT_X  14
+#define LY_BAT_SHIFT_X 76
 
 // --- Printing: ETA / info zone ---
 #define LY_ETA_Y        380
