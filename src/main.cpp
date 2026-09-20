@@ -432,6 +432,22 @@ static void doTapActions() {
     return;
   }
 
+  if (cur == SCREEN_MENU) {
+    menuSelection = (menuSelection + 1) % 3;
+    forceDisplayUpdate();
+    return;
+  }
+
+  if (cur == SCREEN_STREAM_INFO) {
+    setScreenState(SCREEN_MENU);
+    return;
+  }
+
+  if (cur == SCREEN_IDLE || cur == SCREEN_PRINTING) {
+    setScreenState(SCREEN_MENU);
+    return;
+  }
+
   if (getActiveConnCount() >= 2) {
     cycleDisplayedPrinterFromButton();
     return;
@@ -641,6 +657,28 @@ static void handleWakeButton() {
   // #177: a single hold on the "Printer Off" screen opens the power-confirm modal
   // pre-armed for ON (no double-click, no wait-for-release). suppressDim above kept
   // holdConsumed false, so this hold is ours to claim; a short tap still cycles.
+  static bool menuHoldFired = false;
+  if (getScreenState() == SCREEN_MENU) {
+    if (!held) {
+      menuHoldFired = false;
+    } else if (!menuHoldFired && holdMs >= 1200) {
+      menuHoldFired = true;
+      pcPendingClicks = 0;
+      if (menuSelection == 0) {
+        setScreenState(SCREEN_OFF);
+        tft.fillScreen(TFT_BLACK);
+        setBacklight(0);
+        delay(500);
+        esp_deep_sleep_start();
+      } else if (menuSelection == 1) {
+        setScreenState(SCREEN_STREAM_INFO);
+      } else {
+        setScreenState(SCREEN_IDLE);
+      }
+      return;
+    }
+  }
+
   static bool offHoldFired = false;
   if (offScreenNow) {
     if (!held) offHoldFired = false;

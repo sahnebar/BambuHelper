@@ -5713,6 +5713,98 @@ static bool glowScreenEligible() {
          (currentScreen == SCREEN_IDLE || currentScreen == SCREEN_HMS);
 }
 
+int menuSelection = 0;
+
+void forceDisplayUpdate() {
+  lastDisplayUpdate = 0;
+}
+
+static void drawMenu() {
+  markFrameDirty();
+  const int16_t sw = uiW();
+  const int16_t sh = uiH();
+  const int16_t cx = sw / 2;
+
+  // Clear screen
+  tft.fillScreen(CLR_BG);
+
+  // Title
+  setFont(tft, FONT_LARGE);
+  tft.setTextColor(CLR_GREEN, CLR_BG);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("BambuHelper Menue", cx, sh * 0.12);
+
+  // Divider line
+  tft.drawFastHLine(20, sh * 0.18, sw - 40, CLR_TEXT_DIM);
+
+  // Compute card size
+  int16_t cardW = sw - 40;
+  int16_t cardH = (sh >= 400) ? 65 : 45;
+  int16_t cardGap = (sh >= 400) ? 20 : 12;
+  int16_t cardStartY = sh * 0.24;
+
+  const char* options[] = { "Ausschalten", "Livestream Info", "Zurueck" };
+
+  for (int i = 0; i < 3; i++) {
+    int16_t cy_pos = cardStartY + i * (cardH + cardGap);
+    bool selected = (menuSelection == i);
+
+    uint16_t bg_col = selected ? CLR_BLUE : CLR_CARD;
+    uint16_t fg_col = selected ? CLR_TEXT : CLR_TEXT_DIM;
+    uint16_t border_col = selected ? CLR_GREEN : CLR_TEXT_DIM;
+
+    tft.fillRoundRect(20, cy_pos, cardW, cardH, 8, bg_col);
+    tft.drawRoundRect(20, cy_pos, cardW, cardH, 8, border_col);
+
+    tft.setTextColor(fg_col, bg_col);
+    setFont(tft, FONT_BODY);
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString(options[i], cx, cy_pos + cardH / 2);
+  }
+
+  setFont(tft, FONT_SMALL);
+  tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("Tippen: Weiter | Halten: OK", cx, sh - 25);
+}
+
+static void drawStreamInfo() {
+  markFrameDirty();
+  const int16_t sw = uiW();
+  const int16_t sh = uiH();
+  const int16_t cx = sw / 2;
+
+  tft.fillScreen(CLR_BG);
+
+  setFont(tft, FONT_LARGE);
+  tft.setTextColor(CLR_GREEN, CLR_BG);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("Printer Livestream", cx, sh * 0.08);
+
+  setFont(tft, FONT_SMALL);
+  tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
+  tft.drawString("Mit VLC / Player oeffnen", cx, sh * 0.15);
+
+  int16_t qrW = (sh >= 400) ? 140 : 110;
+  int16_t qrX = cx - qrW / 2;
+  int16_t qrY = sh * 0.20;
+
+  tft.qrcode("rtsps://bblp:password@192.168.1.100:322/streaming/live/1", qrX, qrY, qrW, 5);
+
+  int16_t infoY = qrY + qrW + ((sh >= 400) ? 20 : 12);
+  setFont(tft, FONT_BODY);
+  tft.setTextColor(CLR_TEXT, CLR_BG);
+  tft.setTextDatum(MC_DATUM);
+  tft.drawString("User: bblp | Pass: ********" , cx, infoY);
+
+  setFont(tft, FONT_SMALL);
+  tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
+  tft.drawString("IP: 192.168.x.x:322", cx, infoY + ((sh >= 400) ? 25 : 18));
+
+  tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
+  tft.drawString("Tippen zum Zurueckkehren", cx, sh - 25);
+}
+
 // ---------------------------------------------------------------------------
 //  Main update (called from loop)
 // ---------------------------------------------------------------------------
@@ -5947,6 +6039,14 @@ void updateDisplay() {
 
     case SCREEN_FINISHED:
       drawFinished();
+      break;
+
+    case SCREEN_MENU:
+      drawMenu();
+      break;
+
+    case SCREEN_STREAM_INFO:
+      drawStreamInfo();
       break;
 
     case SCREEN_CLOCK:
