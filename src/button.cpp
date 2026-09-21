@@ -176,6 +176,9 @@ void sanitizeButtonPin() {
 }
 
 void initButton() {
+#if defined(BOARD_IS_JC3248W535) || defined(USE_AXS_TOUCH)
+  if (buttonType == BTN_DISABLED) buttonType = BTN_TOUCHSCREEN;
+#endif
   if (buttonType == BTN_DISABLED) return;
   sanitizeButtonPin();
   if (buttonType == BTN_TOUCHSCREEN) {
@@ -195,6 +198,9 @@ void initButton() {
 }
 
 bool wasButtonPressed() {
+#if defined(BOARD_IS_JC3248W535) || defined(USE_AXS_TOUCH)
+  if (buttonType == BTN_DISABLED) buttonType = BTN_TOUCHSCREEN;
+#endif
   if (buttonType == BTN_DISABLED) return false;
 
   bool raw = false;
