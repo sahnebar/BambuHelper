@@ -43,22 +43,27 @@ static int axsReadFinger() {
   static const uint8_t cmd[8] = {0xb5, 0xab, 0xa5, 0x5a, 0x00, 0x00, 0x00, 0x08};
   Wire.beginTransmission(AXS_TOUCH_ADDR);
   Wire.write(cmd, sizeof(cmd));
-  if (Wire.endTransmission() != 0) return -1;
+  if (Wire.endTransmission(false) != 0) {
+    Wire.beginTransmission(AXS_TOUCH_ADDR);
+    Wire.write(cmd, sizeof(cmd));
+    if (Wire.endTransmission(true) != 0) return -1;
+  }
   uint8_t data[8] = {0};
   uint8_t got = Wire.requestFrom((int)AXS_TOUCH_ADDR, (int)sizeof(data));
   uint8_t i = 0;
   while (Wire.available() && i < sizeof(data)) data[i++] = Wire.read();
   if (got < 2 || i < 2) return -1;
-  return (data[0] == 0 && data[1] != 0) ? 1 : 0;
+  // data[1] is finger count (1..5 when touched, 0 when untouched)
+  return (data[1] >= 1 && data[1] <= 5) ? 1 : 0;
 }
 
 void touchInit() {
+  pinMode(AXS_TOUCH_SDA, INPUT_PULLUP);
+  pinMode(AXS_TOUCH_SCL, INPUT_PULLUP);
   Wire.begin(AXS_TOUCH_SDA, AXS_TOUCH_SCL);
-  Wire.setClock(400000);
+  Wire.setClock(100000);
   busReady = true;
   pinMode(AXS_TOUCH_INT, INPUT_PULLUP);
-  // Wire INT on FALLING edge - chip pulses low on touch-down for ~us-ms, shorter
-  // than the main loop period, so level-polling misses fast taps.
   attachInterrupt(digitalPinToInterrupt(AXS_TOUCH_INT), axsTouchIsr, FALLING);
   if (axsTouchProbe()) {
     Serial.printf("AXS15231B touch initialized (I2C SDA=%d SCL=%d INT=%d, addr 0x%02X)\n",

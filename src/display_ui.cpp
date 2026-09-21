@@ -5789,17 +5789,26 @@ static void drawStreamInfo() {
   int16_t qrX = cx - qrW / 2;
   int16_t qrY = sh * 0.20;
 
-  tft.qrcode("rtsps://bblp:password@192.168.1.100:322/streaming/live/1", qrX, qrY, qrW, 5);
+  const char* ip = printers[0].config.ip[0] != '\0' ? printers[0].config.ip : "192.168.1.100";
+  const char* pass = printers[0].config.accessCode[0] != '\0' ? printers[0].config.accessCode : "password";
+  char rtspBuf[128];
+  snprintf(rtspBuf, sizeof(rtspBuf), "rtsps://bblp:%s@%s:322/streaming/live/1", pass, ip);
+
+  tft.qrcode(rtspBuf, qrX, qrY, qrW, 5);
 
   int16_t infoY = qrY + qrW + ((sh >= 400) ? 20 : 12);
   setFont(tft, FONT_BODY);
   tft.setTextColor(CLR_TEXT, CLR_BG);
   tft.setTextDatum(MC_DATUM);
-  tft.drawString("User: bblp | Pass: ********", cx, infoY);
+  char userPassBuf[64];
+  snprintf(userPassBuf, sizeof(userPassBuf), "User: bblp | Pass: %s", pass);
+  tft.drawString(userPassBuf, cx, infoY);
 
   setFont(tft, FONT_SMALL);
   tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
-  tft.drawString("IP: 192.168.x.x:322", cx, infoY + ((sh >= 400) ? 25 : 18));
+  char ipBuf[64];
+  snprintf(ipBuf, sizeof(ipBuf), "IP: %s:322", ip);
+  tft.drawString(ipBuf, cx, infoY + ((sh >= 400) ? 25 : 18));
 
   tft.setTextColor(CLR_TEXT_DIM, CLR_BG);
   tft.drawString("Tippen zum Zurueckkehren", cx, sh - 25);
